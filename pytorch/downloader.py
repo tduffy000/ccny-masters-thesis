@@ -19,13 +19,13 @@ def download(
     :param overwrite: Whether or not to overwrite the target directory.
     :type overwrite: str
     """
+    abs_path = os.path.abspath(path)
+    if overwrite:
+        shutil.rmtree(path, ignore_errors=True)
+    if not os.path.exists(path):
+        os.mkdir(path)
     for url in urls.split(','):
-        abs_path = os.path.abspath(path)
         print(f'Writing Librispeech url: {url} to {path}')
-        if overwrite:
-            shutil.rmtree(path, ignore_errors=True)
-        if not os.path.exists(path):
-            os.mkdir(path)
         LIBRISPEECH(path, url, download=True)
         # remove the extraneous tar archive
         for f in filter(lambda x: x.endswith('tar.gz'), os.listdir(path)):
