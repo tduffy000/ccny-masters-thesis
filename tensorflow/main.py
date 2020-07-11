@@ -1,8 +1,10 @@
 import argparse
 import yaml
+import tensorflow as tf
 from logger import logger
 from dataset import DatasetLoader
 from transformer import FeatureLoader
+from model import SpeakerVerificationModel
 
 def main(args):
     with open(args.config_file, 'r') as stream:
@@ -35,20 +37,23 @@ def main(args):
         ).load()
     if args.train:
         train_conf = conf['train']
-        dataset = DatasetLoader(
+        dataset_loader = DatasetLoader(
             source_dir=feature_data_path,
             url=url,
             batch_size=train_conf['batch_size'],
             example_dim=train_conf['input_dimenions']
-        ).load_dataset()
-        for inputs, targets in dataset:
-            print(f'inputs.shape: {inputs.shape}')
-            print(f'targets.shape: {targets.shape}')
-        # for model_conf in train_conf['models']:
-        #     model = None
-        #     print(model_conf)
-            # model.fit(dataset, epochs=train_conf['epochs'])
-            # store results
+        )
+        dataset = dataset_loader.get_dataset()
+        model_conf = train_conf['network']
+        dataset_metadata = dataset_loader.get_metadata()
+        # we need to pass input shape to the below along with n_classes
+        model = SpeakerVerificationModel(model_conf, dataset_metadata)
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(lr=model_conf['optimizer']['lr']),
+            loss=model_conf['loss'],
+            metrics=model_conf['metrics']
+        )
+        model.fit(dataset, epochs=train_conf['epochs'])
 
     # if args.test:
     #     # load validation shards

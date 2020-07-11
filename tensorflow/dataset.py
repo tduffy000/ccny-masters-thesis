@@ -22,9 +22,8 @@ class DatasetLoader:
         self.serializer = SpectrogramSerializer(example_dim=example_dim)
         with open(f'{self.source_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
+            self.metadata['batch_size'] = self.batch_size
         logger.info(f'Creating dataset with following metadata: {self.metadata}')
-
-    def load_dataset(self):
         tfrecord_file_names = list(filter(lambda f: f.endswith('.tfrecords'), os.listdir(self.source_dir)))
         tfrecord_file_paths = [ f'{self.source_dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
@@ -34,4 +33,12 @@ class DatasetLoader:
                                  .map(self.serializer.deserialize)\
                                  .shuffle(self.batch_size * self.metadata['examples_per_file'])\
                                  .batch(self.batch_size)
+
+    def get_metadata(self):
+        return self.metadata
+
+    def get_single_example(self):
+        return next(iter(self.batch_dataset))
+
+    def get_dataset(self):
         return self.batch_dataset
