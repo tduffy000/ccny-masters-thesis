@@ -3,7 +3,9 @@ import numpy as np
 
 class SpectrogramSerializer:
 
-    def __init__(self):
+    def __init__(self, example_dim=3):
+        assert(example_dim in [2,3])
+        self.example_dim = example_dim
         self.speaker_id_mapping = {}
 
     @staticmethod
@@ -48,6 +50,9 @@ class SpectrogramSerializer:
         }
         example = tf.io.parse_example(proto, feature_map)
         height, width = example['spectrogram/height'], example['spectrogram/width']
-        inputs = tf.reshape(example['spectrogram/encoded'], [height, width, 1])
+        if self.example_dim == 2:
+            inputs = tf.reshape(example['spectrogram/encoded'], [height, width])
+        else: # 3
+            inputs = tf.reshape(example['spectrogram/encoded'], [height, width, 1])
         targets = example['speaker/speaker_id_index']
         return inputs, targets

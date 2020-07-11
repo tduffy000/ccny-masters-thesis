@@ -94,6 +94,12 @@ class FeatureLoader:
                             self.feature_buffer = deque()
                             self.num_files_created += 1
 
-        with open(f'{self.target_dir}/metadata.json', 'w') as f:
-            json.dump({'speaker_id_mapping': self.tf_serializer.speaker_id_mapping, 'shape': self.shape}, f)
-        return self.num_files_created
+        metadata = {
+            'speaker_id_mapping': self.tf_serializer.speaker_id_mapping,
+            'shape': self.shape,
+            'total_files': self.num_files_created,
+            'examples_per_file': self.buffer_flush_size
+        }
+        with open(f'{self.target_dir}/metadata.json', 'w') as stream:
+            json.dump(metadata, stream)
+        return metadata

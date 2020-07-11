@@ -1,0 +1,36 @@
+sr: 16000
+url: dev-clean # this can be a list
+raw_data:
+  path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
+feature_data:
+  path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
+  buffer_flush_size: 500 # for number of TFExamples in a TFRecord file
+features:
+  type: melspectrogram
+  window_length: 1.2 # seconds
+  overlap_percent: 0.5 # out of 1.0
+  frame_length: 0.025 # seconds
+  hop_length: 0.01 # seconds
+  n_fft: 512
+  n_mels: 128
+  use_preemphasis: False
+  trim_silence: True
+  trim_top_db: 30
+  normalization: max
+train:
+  epochs: 100
+  batch_size: 32
+  input_dimenions: 2 # 2 for Conv1D and 3 for Conv2D
+  model:
+    hyperparameters:
+      optimizer:
+        - RMSprop
+        - Adam
+      lr:
+        - 0.0001
+        - 0.00001
+      layers:
+        ???
+  metrics:
+    - accuracy
+  loss: sparse_categorical_crossentropy

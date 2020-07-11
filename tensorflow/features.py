@@ -20,6 +20,7 @@ class FeatureExtractor:
         preemphasis_coef=0.97,
         trim_silence=True,
         trim_top_db=30,
+        normalization=None,
         window='hamming',
         power_frame_mapping_fn=np.log10
     ):
@@ -34,6 +35,11 @@ class FeatureExtractor:
         self.preemphasis_coef = preemphasis_coef
 
         # conversion of raw waveform windows into mel spectrogram
+        self.max_normalization, self.mean_normalization = False, False
+        if normalization == 'mean':
+            self.mean_normalization = True
+        if normalization == 'max':
+            self.max_normalization = True
         self.frame_length = int(frame_length * sr)
         self.hop_length = int(hop_length * sr)
         self.n_fft=n_fft
@@ -54,7 +60,10 @@ class FeatureExtractor:
             v, _ = librosa.effects.trim(v, top_db=self.trim_top_db)
         if self.use_preemphasis:
             v = librosa.effects.preemphasis(v, coef=self.preemphasis_coef)
-        # TODO: we have that issue with not enough sample for frame (have to handle)
+        if self.mean_normalization:
+            v -= np.mean(v)
+        if self.max_normalization:
+            v = v / np.max(v)
         if v.shape[0] < self.window_length:
             return []
         return librosa.util.frame(v, frame_length=self.window_length, hop_length=self.overlap, axis=0)

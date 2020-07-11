@@ -131,3 +131,4 @@ dmypy.json
 
 # Model data directories
 raw-data/
+feature-data/
