@@ -42,11 +42,11 @@ class SpectrogramSerializer:
 
     def deserialize(self, proto):
         feature_map = {
-            'spectrogram/height': tf.FixedLenFeature([], tf.int64),
-            'spectrogram/width': tf.FixedLenFeature([], tf.int64),
-            'spectrogram/encoded': tf.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
-            'speaker/orig_speaker_id': tf.FixedLenFeature([], tf.int64),
-            'speaker/speaker_id_index': tf.FixedLenFeature([], tf.int64)
+            'spectrogram/height': tf.io.FixedLenFeature([], tf.int64),
+            'spectrogram/width': tf.io.FixedLenFeature([], tf.int64),
+            'spectrogram/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+            'speaker/orig_speaker_id': tf.io.FixedLenFeature([], tf.int64),
+            'speaker/speaker_id_index': tf.io.FixedLenFeature([], tf.int64)
         }
         example = tf.io.parse_example(proto, feature_map)
         height, width = example['spectrogram/height'], example['spectrogram/width']

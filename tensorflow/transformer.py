@@ -12,6 +12,7 @@ import numpy as np
 import tensorflow as tf
 from features import FeatureExtractor
 from serializer import SpectrogramSerializer
+from logger import logger
 
 class FeatureLoader:
     """
@@ -37,6 +38,7 @@ class FeatureLoader:
         preemphasis_coef=0.97,
         trim_silence=True,
         trim_top_db=30,
+        normalization=None,
         window='hamming',
         power_frame_mapping_fn=np.log10
     ):
@@ -55,6 +57,7 @@ class FeatureLoader:
             use_preemphasis=use_preemphasis,
             preemphasis_coef=preemphasis_coef,
             trim_silence=trim_silence,
+            normalization=normalization,
             window=window,
             power_frame_mapping_fn=power_frame_mapping_fn
         )
@@ -85,7 +88,9 @@ class FeatureLoader:
                         self.feature_buffer.append(protobuf)
                         if len(self.feature_buffer) == self.buffer_flush_size:
                             # write out TFRecord from the buffer
-                            with tf.io.TFRecordWriter(f'{self.target_dir}/shard_{self.num_files_created+1:05d}.tfrecords') as writer:
+                            path = f'{self.target_dir}/shard_{self.num_files_created+1:05d}.tfrecords'
+                            logger.info(f'Flushing feature buffer into: {path}')
+                            with tf.io.TFRecordWriter(path) as writer:
                                 while True:
                                     if len(self.feature_buffer) == 0:
                                         break
@@ -100,6 +105,7 @@ class FeatureLoader:
             'total_files': self.num_files_created,
             'examples_per_file': self.buffer_flush_size
         }
+        logger.info(f'Finished creating features, with metadata: {metadata}')
         with open(f'{self.target_dir}/metadata.json', 'w') as stream:
             json.dump(metadata, stream)
         return metadata

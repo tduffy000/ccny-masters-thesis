@@ -1,5 +1,7 @@
 import argparse
 import yaml
+from logger import logger
+from dataset import DatasetLoader
 from transformer import FeatureLoader
 
 def main(args):
@@ -12,6 +14,7 @@ def main(args):
     feature_data_path = conf['feature_data']['path']
     if args.feature_engineering:
         fe_conf = conf['features']
+        logger.info(f'Running feature engineering with config: {fe_conf}')
         FeatureLoader(
             source_dir=raw_data_path,
             target_dir=feature_data_path,
@@ -34,12 +37,17 @@ def main(args):
         train_conf = conf['train']
         dataset = DatasetLoader(
             source_dir=feature_data_path,
+            url=url,
             batch_size=train_conf['batch_size'],
             example_dim=train_conf['input_dimenions']
         ).load_dataset()
-        for model_conf in train_conf['models']:
-            model = None
-            model.fit(dataset, epochs=train_conf['epochs'])
+        for inputs, targets in dataset:
+            print(f'inputs.shape: {inputs.shape}')
+            print(f'targets.shape: {targets.shape}')
+        # for model_conf in train_conf['models']:
+        #     model = None
+        #     print(model_conf)
+            # model.fit(dataset, epochs=train_conf['epochs'])
             # store results
 
     # if args.test:
