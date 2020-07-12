@@ -132,3 +132,6 @@ dmypy.json
 # Model data directories
 raw-data/
 feature-data/
+
+# Tensorboard logs
+.tensorboard_logs/

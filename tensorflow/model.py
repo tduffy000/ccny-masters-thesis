@@ -40,8 +40,11 @@ class SpeakerVerificationModel(tf.keras.Model):
     def _parse_layer_conf(self, conf):
         for layer_name, layer_conf in conf.items():
             if layer_name == 'conv1d':
-                for _ in range(layer_conf['n']):
-                    self.layer_list += self.get_conv1d(layer_conf['filters'], layer_conf['kernel_size'])
+                for layer in layer_conf:
+                    self.layer_list += self.get_conv1d(
+                        layer['filters'],
+                        layer['kernel_size']
+                    )
             elif layer_name == 'fc':
                 self.layer_list += [tf.keras.layers.Flatten()]
                 for _ in range(layer_conf['n']):

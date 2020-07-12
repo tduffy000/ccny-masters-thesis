@@ -16,11 +16,11 @@ features:
   use_preemphasis: False
   trim_silence: True
   trim_top_db: 30
-  normalization: max
+  # normalization: max
 train:
   epochs: 100
-  batch_size: 32
-  input_dimenions: 2 # 2 for Conv1D and 3 for Conv2D
+  batch_size: 16
+  input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:
     metrics:
       - accuracy
@@ -31,10 +31,18 @@ train:
     dropout: 0.1
     layers:
       conv1d:
-        n: 3
-        filters: 64
-        kernel_size: 5
-        use_batchnorm: True
+        - layer1:
+          filters: 64
+          kernel_size: 16
+          use_batchnorm: True
+        - layer2:
+          filters: 64
+          kernel_size: 5
+          use_batchnorm: True
+        - layer3:
+          filters: 32
+          kernel_size: 2
+          use_batchnorm: True
       fc:
         n: 2
         nodes: 512
@@ -42,3 +50,12 @@ train:
         nodes: 64
       output:
         n_classes: 40 # should be pulled from the dataset metadata
+    callbacks:
+      tensorboard:
+        log_dir: .tensorboard_logs
+        write_images: True
+      # lr_scheduler:
+      #   cutoff_epoch: 25
+      #   decay: exponential
+      csv_logger:
+        filename: training_log.csv

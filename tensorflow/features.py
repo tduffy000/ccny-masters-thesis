@@ -21,8 +21,7 @@ class FeatureExtractor:
         trim_silence=True,
         trim_top_db=30,
         normalization=None,
-        window='hamming',
-        power_frame_mapping_fn=np.log10
+        window='hamming'
     ):
         self.sr = sr
 
@@ -44,7 +43,6 @@ class FeatureExtractor:
         self.hop_length = int(hop_length * sr)
         self.n_fft=n_fft
         self.n_mels=n_mels
-        self.power_frame_mapping_fn = power_frame_mapping_fn
 
     def _get_windows(self, v):
         """
@@ -84,4 +82,7 @@ class FeatureExtractor:
                 win_length=self.frame_length,
                 hop_length=self.hop_length
             )
-            yield self.power_frame_mapping_fn(feature)
+            # TODO: this generates Infinities (b/c of the Log transformation)
+            # won't work unless we fix this!!!!
+            # https://librosa.org/librosa/generated/librosa.core.power_to_db.html#librosa.core.power_to_db
+            yield feature# self.power_frame_mapping_fn(feature)

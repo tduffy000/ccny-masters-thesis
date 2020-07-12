@@ -1,7 +1,6 @@
 """
 The tf.data.Dataset sourced from our TFRecord files written by the transformer.
 """
-# https://github.com/jkjung-avt/keras_imagenet/tree/ece09ff909cf7db3640f849a7bf7036330574d29
 import json
 import os
 import tensorflow as tf
@@ -32,7 +31,7 @@ class DatasetLoader:
                                  .shuffle(len(tfrecord_file_paths))\
                                  .map(self.serializer.deserialize)\
                                  .shuffle(self.batch_size * self.metadata['examples_per_file'])\
-                                 .batch(self.batch_size)
+                                 .batch(self.batch_size, drop_remainder=True)
 
     def get_metadata(self):
         return self.metadata

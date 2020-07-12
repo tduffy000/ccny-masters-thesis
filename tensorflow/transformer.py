@@ -2,7 +2,6 @@
 Responsible for performing the feature transformations on the raw audio files
 and serializing them to TFRecords.
 """
-import argparse
 from collections import deque
 import json
 import os
@@ -39,8 +38,7 @@ class FeatureLoader:
         trim_silence=True,
         trim_top_db=30,
         normalization=None,
-        window='hamming',
-        power_frame_mapping_fn=np.log10
+        window='hamming'
     ):
         self.source_dir = f'{source_dir}/LibriSpeech/{url}'
         self.target_dir = f'{target_dir}/{url}'
@@ -58,8 +56,7 @@ class FeatureLoader:
             preemphasis_coef=preemphasis_coef,
             trim_silence=trim_silence,
             normalization=normalization,
-            window=window,
-            power_frame_mapping_fn=power_frame_mapping_fn
+            window=window
         )
         self.sr = sr
         self.num_files_created = 0
@@ -67,6 +64,18 @@ class FeatureLoader:
         self.feature_buffer = deque()
         self.buffer_flush_size = buffer_flush_size
         self.shape = None
+
+    @staticmethod
+    def _validate_numeric(feature):
+        """
+        :param feature: The numpy array feature to be written out.
+        :type feature: numpy.ndarray
+        """
+        nans_found = np.sum(np.isnan(feature))
+        infs_found = np.sum(np.isinf(feature))
+        if nans_found > 0 or infs_found > 0:
+            logger.fatal('Found a NaN or Infinity!')
+            raise ValueError('Features must have real-valued elements.')
 
     def load(self):
         """
@@ -81,13 +90,13 @@ class FeatureLoader:
                 for f in filter(lambda x: x.endswith('.flac'), files): # iterate over audio files and make features
                     y, _ = librosa.load(f'{root}/{f}', sr=self.sr)
                     for feature in self.extractor.as_melspectrogram(y):
-                        if self.shape is None:
+                        if self.shape is None: # just so we only compute once
                             self.shape = feature.shape
-                        # TODO: how to handle divide by zero error in log10
+                        self._validate_numeric(feature) # validate we're not writing np.nan or np.inf
                         protobuf = self.tf_serializer.serialize(feature, int(speaker_id))
                         self.feature_buffer.append(protobuf)
+                        # flush the buffer into a TFRecord file
                         if len(self.feature_buffer) == self.buffer_flush_size:
-                            # write out TFRecord from the buffer
                             path = f'{self.target_dir}/shard_{self.num_files_created+1:05d}.tfrecords'
                             logger.info(f'Flushing feature buffer into: {path}')
                             with tf.io.TFRecordWriter(path) as writer:
