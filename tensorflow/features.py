@@ -1,10 +1,7 @@
-"""
-Responsible for turning the raw data (.flac files) into features to be fed into
-our model.
-"""
 import librosa
 import numpy as np
 
+# TODO: some add the 1st and 2nd derivatives by way of librosa.feature.delta
 class FeatureExtractor:
 
     def __init__(
@@ -21,7 +18,7 @@ class FeatureExtractor:
         trim_silence=True,
         trim_top_db=30,
         normalization=None,
-        window='hamming'
+        window='hamming' # unused at the moment
     ):
         self.sr = sr
 
@@ -43,6 +40,7 @@ class FeatureExtractor:
         self.hop_length = int(hop_length * sr)
         self.n_fft=n_fft
         self.n_mels=n_mels
+        self.log_lift = 1e-6 # required to avoid introducing np.nan
 
     def _get_windows(self, v):
         """
@@ -82,7 +80,4 @@ class FeatureExtractor:
                 win_length=self.frame_length,
                 hop_length=self.hop_length
             )
-            # TODO: this generates Infinities (b/c of the Log transformation)
-            # won't work unless we fix this!!!!
-            # https://librosa.org/librosa/generated/librosa.core.power_to_db.html#librosa.core.power_to_db
-            yield feature# self.power_frame_mapping_fn(feature)
+            yield np.log(feature + self.log_lift)

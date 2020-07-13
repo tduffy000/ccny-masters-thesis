@@ -18,12 +18,10 @@ features:
   trim_top_db: 30
   # normalization: max
 train:
-  epochs: 100
+  epochs: 10
   batch_size: 16
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:
-    metrics:
-      - accuracy
     loss: sparse_categorical_crossentropy
     optimizer:
       type: Adam
@@ -58,4 +56,6 @@ train:
       #   cutoff_epoch: 25
       #   decay: exponential
       csv_logger:
-        filename: training_log.csv
+        dir: training_logs
+      checkpoint:
+        dir: model_checkpoints

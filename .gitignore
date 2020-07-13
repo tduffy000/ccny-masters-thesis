@@ -135,3 +135,12 @@ feature-data/
 
 # Tensorboard logs
 .tensorboard_logs/
+
+# CSV Training logs
+training_logs/
+
+# Model checkpoint files
+model_checkpoints/
+
+# Frozen models
+frozen_models/

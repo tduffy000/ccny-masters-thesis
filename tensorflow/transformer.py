@@ -13,6 +13,7 @@ from features import FeatureExtractor
 from serializer import SpectrogramSerializer
 from logger import logger
 
+# TODO: extend this beyond LibriSpeech
 class FeatureLoader:
     """
     Loads the raw .flac files and is responsible for performing:

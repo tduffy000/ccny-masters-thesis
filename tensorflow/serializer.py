@@ -29,6 +29,7 @@ class SpectrogramSerializer:
             value = [value]
         return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
+    # TODO: add a field for Dataset
     def serialize(self, spectrogram, speaker_id):
         if speaker_id not in self.speaker_id_mapping:
             self.speaker_id_mapping[speaker_id] = len(self.speaker_id_mapping)
@@ -40,6 +41,7 @@ class SpectrogramSerializer:
             'speaker/speaker_id_index': self._int64_feature(self.speaker_id_mapping[speaker_id])
         }))
 
+    # TODO: add a field for Dataset
     def deserialize(self, proto):
         feature_map = {
             'spectrogram/height': tf.io.FixedLenFeature([], tf.int64),

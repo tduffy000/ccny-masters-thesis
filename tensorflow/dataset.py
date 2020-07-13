@@ -1,6 +1,3 @@
-"""
-The tf.data.Dataset sourced from our TFRecord files written by the transformer.
-"""
 import json
 import os
 import tensorflow as tf
