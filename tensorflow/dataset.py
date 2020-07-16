@@ -8,33 +8,44 @@ class DatasetLoader:
 
     def __init__(
         self,
-        source_dir,
+        root_dir,
         url,
         batch_size,
         example_dim
     ):
-        self.source_dir = f'{source_dir}/{url}'
+        self.train_dir = f'{root_dir}/train'
+        self.test_dir = f'{root_dir}/test'
         self.batch_size = batch_size
         self.serializer = SpectrogramSerializer(example_dim=example_dim)
-        with open(f'{self.source_dir}/metadata.json', 'r') as stream:
+        with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
             self.metadata['batch_size'] = self.batch_size
         logger.info(f'Creating dataset with following metadata: {self.metadata}')
-        tfrecord_file_names = list(filter(lambda f: f.endswith('.tfrecords'), os.listdir(self.source_dir)))
-        tfrecord_file_paths = [ f'{self.source_dir}/{fname}' for fname in tfrecord_file_names ]
+
+    def _prep_dataset(self, dir):
+        tfrecord_file_names = list(filter(lambda f: f.endswith('.tfrecords'), os.listdir(dir)))
+        tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
-        self.raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
-        self.batch_dataset = self.raw_dataset\
-                                 .shuffle(len(tfrecord_file_paths))\
-                                 .map(self.serializer.deserialize)\
-                                 .shuffle(self.batch_size * self.metadata['examples_per_file'])\
-                                 .batch(self.batch_size, drop_remainder=True)
+        raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
+        batch_dataset = raw_dataset\
+                            .shuffle(len(tfrecord_file_paths))\
+                            .map(self.serializer.deserialize)\
+                            .shuffle(self.batch_size * self.metadata['examples_per_file'])\
+                            .batch(self.batch_size, drop_remainder=True)
+        return batch_dataset
 
     def get_metadata(self):
         return self.metadata
 
-    def get_single_example(self):
-        return next(iter(self.batch_dataset))
+    def get_single_train_batch(self):
+        train_dataset = self._prep_dataset(self.train_dir)
+        return next(iter(train_dataset))
+
+    def get_single_test_batch(self):
+        test_dataset = self._prep_dataset(self.test_dir)
+        return next(iter(test_dataset))
 
     def get_dataset(self):
-        return self.batch_dataset
+        train_dataset = self._prep_dataset(self.train_dir)
+        test_dataset = self._prep_dataset(self.test_dir)
+        return train_dataset, test_dataset

@@ -29,8 +29,7 @@ class SpectrogramSerializer:
             value = [value]
         return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
-    # TODO: add a field for Dataset
-    def serialize(self, spectrogram, speaker_id):
+    def serialize(self, spectrogram, speaker_id, file):
         if speaker_id not in self.speaker_id_mapping:
             self.speaker_id_mapping[speaker_id] = len(self.speaker_id_mapping)
         return tf.train.Example(features=tf.train.Features(feature={
@@ -38,17 +37,18 @@ class SpectrogramSerializer:
             'spectrogram/width': self._int64_feature(spectrogram.shape[1]),
             'spectrogram/encoded': self._float_feature(spectrogram), # TODO: should this be a _float_feature or _bytes_feature???
             'speaker/orig_speaker_id': self._int64_feature(speaker_id),
-            'speaker/speaker_id_index': self._int64_feature(self.speaker_id_mapping[speaker_id])
+            'speaker/speaker_id_index': self._int64_feature(self.speaker_id_mapping[speaker_id]),
+            'data/file': self._bytes_feature(bytes(file, 'utf-8'))
         }))
 
-    # TODO: add a field for Dataset
     def deserialize(self, proto):
         feature_map = {
             'spectrogram/height': tf.io.FixedLenFeature([], tf.int64),
             'spectrogram/width': tf.io.FixedLenFeature([], tf.int64),
             'spectrogram/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
             'speaker/orig_speaker_id': tf.io.FixedLenFeature([], tf.int64),
-            'speaker/speaker_id_index': tf.io.FixedLenFeature([], tf.int64)
+            'speaker/speaker_id_index': tf.io.FixedLenFeature([], tf.int64),
+            'data/file': tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_example(proto, feature_map)
         height, width = example['spectrogram/height'], example['spectrogram/width']

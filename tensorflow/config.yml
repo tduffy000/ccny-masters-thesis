@@ -1,7 +1,9 @@
 sr: 16000
-url: dev-clean # this can be a list
 raw_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
+  datasets:
+    LibriSpeech:
+      - dev-clean
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   buffer_flush_size: 500 # for number of TFExamples in a TFRecord file

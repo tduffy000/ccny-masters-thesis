@@ -15,16 +15,17 @@ def main(args):
         conf = yaml.safe_load(stream)
         stream.close()
 
-    url = conf['url']
-    raw_data_path = conf['raw_data']['path']
+    raw_data_conf = conf['raw_data']
+    raw_data_path = raw_data_conf['path']
     feature_data_path = conf['feature_data']['path']
+    # TODO: now we need to pass the raw_data_conf['datasets'] list
     if args.feature_engineering:
         fe_conf = conf['features']
         logger.info(f'Running feature engineering with config: {fe_conf}')
         FeatureLoader(
-            source_dir=raw_data_path,
+            root_dir=raw_data_path,
+            datasets=raw_data_conf['datasets'],
             target_dir=feature_data_path,
-            url=url,
             window_length=fe_conf['window_length'], # in seconds
             overlap_percent=fe_conf['overlap_percent'], # in percent
             frame_length=fe_conf['frame_length'], # in seconds
@@ -49,7 +50,7 @@ def main(args):
             batch_size=train_conf['batch_size'],
             example_dim=train_conf['input_dimensions']
         )
-        dataset = dataset_loader.get_dataset()
+        train_dataset, test_dataset = dataset_loader.get_dataset()
         model_conf = train_conf['network']
         dataset_metadata = dataset_loader.get_metadata()
         model = SpeakerVerificationModel(model_conf, dataset_metadata)
@@ -58,7 +59,7 @@ def main(args):
             lr=model_conf['optimizer']['lr'],
             momentum=model_conf['optimizer'].get('momentum', 0.0), # default for tf.keras.optimizers.{SGD, RMSprop}
             rho=model_conf['optimizer'].get('rho', 0.9), # default for tf.keras.optimizers.RMSprop
-            epsilon= model_conf['optimizer'].get('epsilon', 1e-7)
+            epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
         )
         model.compile(
             optimizer=optim,
@@ -69,7 +70,7 @@ def main(args):
         for callback, conf in model_conf['callbacks'].items():
             # TODO: clean up lr flag here
             callbacks.append(get_callback(callback, conf, lr=model_conf['optimizer']['lr']))
-        model.fit(dataset, epochs=train_conf['epochs'], callbacks=callbacks)
+        model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
         if args.freeze_model:
             if not os.path.exists('frozen_models'):
                 os.makedirs('frozen_models')
