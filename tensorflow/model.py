@@ -59,8 +59,20 @@ class SpeakerVerificationModel(tf.keras.Model):
         return layers
 
     @staticmethod
-    def get_lstm():
-        pass
+    def get_lstm(units, activation='tanh'):
+        return [tf.keras.layers.LSTM(units=units, activation=activation)]
+
+    @staticmethod
+    def get_gru(units, activation='tanh'):
+        return [tf.keras.layer.GRU(units=units, activation=activation)]
+
+    @staticmethod
+    def get_bidirectional(layer_type, **kwargs):
+        if layer_type == 'lstm':
+            inner_layer = tf.keras.layers.LSTM(kwargs['units'])
+        elif layer_type == 'gru':
+            inner_layer = tf.keras.layers.GRU(kwargs['units'])
+        return [tf.keras.layers.Bidirectional(inner_layer)]
 
     @staticmethod
     def get_global_pooling():
@@ -84,6 +96,10 @@ class SpeakerVerificationModel(tf.keras.Model):
                     layer['filters'],
                     layer['kernel_size']
                 )
+            elif layer_type == 'lstm':
+                self.layer_list += self.get_lstm(units=layer['units'])
+            elif layer_type == 'gru':
+                self.layer_list += self.get_gru(units=layer['units'])
             elif layer_type == 'flatten':
                 self.layer_list += [tf.keras.layers.Flatten()]
             elif layer_type == 'fc':
