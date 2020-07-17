@@ -45,8 +45,7 @@ def main(args):
             tf.keras.backend.clear_session()
         train_conf = conf['train']
         dataset_loader = DatasetLoader(
-            source_dir=feature_data_path,
-            url=url,
+            root_dir=feature_data_path,
             batch_size=train_conf['batch_size'],
             example_dim=train_conf['input_dimensions']
         )
@@ -71,6 +70,7 @@ def main(args):
             # TODO: clean up lr flag here
             callbacks.append(get_callback(callback, conf, lr=model_conf['optimizer']['lr']))
         model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
+        model.evaluate(test_dataset)
         if args.freeze_model:
             if not os.path.exists('frozen_models'):
                 os.makedirs('frozen_models')

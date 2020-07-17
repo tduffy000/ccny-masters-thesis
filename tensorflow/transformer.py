@@ -206,6 +206,6 @@ class FeatureLoader:
             'datasets': self.datasets
         }
         logger.info(f'Finished creating features, with metadata: {metadata}')
-        with open(f'{self.root_dir}/metadata.json', 'w') as stream:
+        with open(f'{self.target_dir}/metadata.json', 'w') as stream:
             json.dump(metadata, stream)
         return metadata

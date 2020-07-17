@@ -9,7 +9,6 @@ class DatasetLoader:
     def __init__(
         self,
         root_dir,
-        url,
         batch_size,
         example_dim
     ):
