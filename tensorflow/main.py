@@ -18,7 +18,6 @@ def main(args):
     raw_data_conf = conf['raw_data']
     raw_data_path = raw_data_conf['path']
     feature_data_path = conf['feature_data']['path']
-    # TODO: now we need to pass the raw_data_conf['datasets'] list
     if args.feature_engineering:
         fe_conf = conf['features']
         logger.info(f'Running feature engineering with config: {fe_conf}')
@@ -38,7 +37,8 @@ def main(args):
             preemphasis_coef=fe_conf.get('preemphasis_coef', 0.97),
             trim_silence=fe_conf['trim_silence'],
             trim_top_db=fe_conf['trim_top_db'],
-            normalization=fe_conf.get('normalization', None)
+            normalization=fe_conf.get('normalization', None),
+            test_data_ratio=conf['feature_data']['test_ratio']
         ).load()
     if args.train:
         if args.new_session:
@@ -70,11 +70,14 @@ def main(args):
             # TODO: clean up lr flag here
             callbacks.append(get_callback(callback, conf, lr=model_conf['optimizer']['lr']))
         model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
+        logger.info('Finished training, now evaluating...')
         model.evaluate(test_dataset)
         if args.freeze_model:
+            path = f'frozen_models/{int(time.time())}'
+            logger.info(f'Freezing trained model to ./{path}')
             if not os.path.exists('frozen_models'):
                 os.makedirs('frozen_models')
-            model.save(f'frozen_models/{int(time.time())}')
+            model.save(path)
 
     # if args.test:
     #     # load validation shards

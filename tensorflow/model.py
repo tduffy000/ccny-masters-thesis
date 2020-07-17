@@ -70,22 +70,27 @@ class SpeakerVerificationModel(tf.keras.Model):
     def get_fc(nodes, activation='relu'):
         return [tf.keras.layers.Dense(nodes, activation=activation)]
 
-    # this can use the ModelConfig object
     def _parse_layer_conf(self, conf):
-        for layer_name, layer_conf in conf.items():
-            if layer_name == 'conv1d':
-                for layer in layer_conf:
-                    self.layer_list += self.get_conv1d(
-                        layer['filters'],
-                        layer['kernel_size']
-                    )
-            elif layer_name == 'fc':
+        for layer_conf in conf:
+            if isinstance(layer_conf, dict):
+                # for layers requiring parameters
+                layer_type = list(layer_conf.keys())[0]
+                layer = layer_conf[layer_type]
+            elif isinstance(layer_conf, str):
+                # for things like 'output' or 'flatten' with no parameters
+                layer_type = layer_conf
+            if layer_type == 'conv1d':
+                self.layer_list += self.get_conv1d(
+                    layer['filters'],
+                    layer['kernel_size']
+                )
+            elif layer_type == 'flatten':
                 self.layer_list += [tf.keras.layers.Flatten()]
-                for _ in range(layer_conf['n']):
-                    self.layer_list += self.get_fc(layer_conf['nodes'])
-            elif layer_name == 'embedding':
-                self.layer_list += self.get_fc(layer_conf['nodes'])
-            elif layer_name == 'output':
+            elif layer_type == 'fc':
+                self.layer_list += self.get_fc(layer['nodes'])
+            elif layer_type == 'embedding':
+                self.layer_list += self.get_fc(layer['nodes'])
+            elif layer_type == 'output':
                 self.layer_list += self.get_fc(self.n_classes, 'softmax')
         return tf.keras.Sequential(self.layer_list)
 

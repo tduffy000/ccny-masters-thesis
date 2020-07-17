@@ -7,6 +7,7 @@ raw_data:
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   buffer_flush_size: 500 # for number of TFExamples in a TFRecord file
+  test_ratio: 0.5
 features:
   type: melspectrogram
   window_length: 1.0 # seconds
@@ -30,26 +31,26 @@ train:
       lr: 0.00001
     dropout: 0.1
     layers:
-      conv1d:
-        - layer1:
+      - conv1d:
           filters: 64
           kernel_size: 16
           use_batchnorm: True
-        - layer2:
+      - conv1d:
           filters: 64
           kernel_size: 5
           use_batchnorm: True
-        - layer3:
+      - conv1d:
           filters: 32
           kernel_size: 2
           use_batchnorm: True
-      fc:
-        n: 2
-        nodes: 512
-      embedding:
-        nodes: 64
-      output:
-        n_classes: 40 # should be pulled from the dataset metadata
+      - flatten
+      - fc:
+          nodes: 512
+      - fc:
+          nodes: 512
+      - embedding:
+          nodes: 64
+      - output
     callbacks:
       tensorboard:
         log_dir: .tensorboard_logs
