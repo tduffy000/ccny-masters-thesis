@@ -144,3 +144,9 @@ model_checkpoints/
 
 # Frozen models
 frozen_models/
+
+# vi / emacs backups
+*~
+
+# PDF's of cited papers 
+literature/sources
