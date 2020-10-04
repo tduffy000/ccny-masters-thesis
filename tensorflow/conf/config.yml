@@ -10,7 +10,7 @@ feature_data:
   test_ratio: 0.3
 features:
   type: melspectrogram
-  window_length: 1.0 # seconds in GE2E they only take 180 frames out for each
+  window_length: 0.28125 # 180 frames (25 ms/frame)
   overlap_percent: 0.5 # out of 1.0
   frame_length: 0.025 # seconds
   hop_length: 0.01 # seconds
@@ -18,7 +18,7 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 10
+  epochs: 20
   batch_size: 16
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:
