@@ -36,12 +36,7 @@ class FeatureLoader:
         n_fft=512,
         n_mels=40,
         sr=16000,
-        use_preemphasis=True,
-        preemphasis_coef=0.97,
-        trim_silence=True,
         trim_top_db=30,
-        normalization=None,
-        window='hamming',
         test_data_ratio=0.2
     ):
         self.root_dir = root_dir
@@ -57,11 +52,7 @@ class FeatureLoader:
             n_fft=n_fft,
             n_mels=n_mels,
             sr=sr,
-            use_preemphasis=use_preemphasis,
-            preemphasis_coef=preemphasis_coef,
-            trim_silence=trim_silence,
-            normalization=normalization,
-            window=window
+            trim_top_db=trim_top_db
         )
         self.sr = sr
         self.num_files_created = 0
@@ -156,6 +147,7 @@ class FeatureLoader:
         for speaker, files in speaker_files.items():
             for f in files:
                 y, _ = librosa.load(f, sr=self.sr) # is this same for LibriSpeech & VoxCeleb1?
+                # TODO: this has to be generalized given we're building multiple inputs here
                 for feature in self.extractor.as_melspectrogram(y):
                     if self.shape is None:
                         self.shape = feature.shape

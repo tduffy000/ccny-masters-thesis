@@ -33,11 +33,7 @@ def main(args):
             n_fft=fe_conf['n_fft'],
             n_mels=fe_conf['n_mels'],
             sr=conf['sr'],
-            use_preemphasis=fe_conf['use_preemphasis'],
-            preemphasis_coef=fe_conf.get('preemphasis_coef', 0.97),
-            trim_silence=fe_conf['trim_silence'],
             trim_top_db=fe_conf['trim_top_db'],
-            normalization=fe_conf.get('normalization', None),
             test_data_ratio=conf['feature_data']['test_ratio']
         ).load()
     if args.train:
@@ -75,12 +71,8 @@ def main(args):
         if args.freeze_model:
             path = f'frozen_models/{int(time.time())}'
             logger.info(f'Freezing trained model to ./{path}')
-            if not os.path.exists('frozen_models'):
-                os.makedirs('frozen_models')
+            os.makedirs('frozen_models', exist_ok=True)
             model.save(path)
-
-    # if args.test:
-    #     # load validation shards
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

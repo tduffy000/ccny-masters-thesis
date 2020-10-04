@@ -10,16 +10,13 @@ feature_data:
   test_ratio: 0.3
 features:
   type: melspectrogram
-  window_length: 1.0 # seconds
+  window_length: 1.0 # seconds in GE2E they only take 180 frames out for each
   overlap_percent: 0.5 # out of 1.0
   frame_length: 0.025 # seconds
   hop_length: 0.01 # seconds
   n_fft: 512
-  n_mels: 128
-  use_preemphasis: False
-  trim_silence: True
-  trim_top_db: 30
-  # normalization: max
+  n_mels: 40
+  trim_top_db: 20
 train:
   epochs: 10
   batch_size: 16
@@ -43,8 +40,8 @@ train:
           filters: 32
           kernel_size: 2
           use_batchnorm: True
-      - lstm:
-          units: 8
+      # - lstm:
+      #     units: 8
       - flatten
       - fc:
           nodes: 512

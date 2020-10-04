@@ -4,6 +4,7 @@ import tensorflow as tf
 from logger import logger
 from serializer import SpectrogramSerializer
 
+# TODO: batch_size is optional given GE2E
 class DatasetLoader:
 
     def __init__(

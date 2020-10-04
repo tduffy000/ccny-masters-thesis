@@ -10,6 +10,7 @@ import tensorflow as tf
 # https://towardsdatascience.com/understanding-and-coding-a-resnet-in-keras-446d7ff84d33
 
 # https://github.com/Janghyun1230/Speaker_Verification
+# https://www.tensorflow.org/guide/keras/train_and_evaluate#handling_losses_and_metrics_that_dont_fit_the_standard_signature
 class SpeakerVerificationModel(tf.keras.Model):
 
     def __init__(self, conf, dataset_metadata):
