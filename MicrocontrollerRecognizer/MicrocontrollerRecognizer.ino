@@ -11,6 +11,9 @@ int mic = A0;
 const int sampleTime = 50; 
 int micOut;
 
+// TODO: voice activity detection to begin recording samples
+
+// TODO: spectrogram calculation
 
 void setup() {
   Serial.begin(9600);
@@ -25,7 +28,7 @@ void loop() {
 // Find the Peak-to-Peak Amplitude Function
 int findPTPAmp(){
 // Time variables to find the peak-to-peak amplitude
-   unsigned long startTime= millis();  // Start of sample window
+   unsigned long startTime = millis();  // Start of sample window
    unsigned int PTPAmp = 0; 
 
 // Signal variables to find the peak-to-peak amplitude
