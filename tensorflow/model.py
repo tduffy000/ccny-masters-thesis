@@ -4,13 +4,6 @@ architecture.
 """
 import tensorflow as tf
 
-# https://arxiv.org/pdf/1803.05427.pdf
-# https://towardsdatascience.com/tensorflow-speech-recognition-challenge-solution-outline-9c42dbd219c9
-# https://towardsdatascience.com/debugging-a-machine-learning-model-written-in-tensorflow-and-keras-f514008ce736
-# https://towardsdatascience.com/understanding-and-coding-a-resnet-in-keras-446d7ff84d33
-
-# https://github.com/Janghyun1230/Speaker_Verification
-# https://www.tensorflow.org/guide/keras/train_and_evaluate#handling_losses_and_metrics_that_dont_fit_the_standard_signature
 class SpeakerVerificationModel(tf.keras.Model):
 
     def __init__(self, conf, dataset_metadata):

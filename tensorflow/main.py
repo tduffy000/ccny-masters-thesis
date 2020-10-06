@@ -11,6 +11,8 @@ from utils import get_callback, get_optimizer
 
 # TODO: we could probably put these into a Config object
 def main(args):
+    assert(args.config_file is not None), 'Must specify a --config_file'
+
     with open(args.config_file, 'r') as stream:
         conf = yaml.safe_load(stream)
         stream.close()
@@ -18,6 +20,7 @@ def main(args):
     raw_data_conf = conf['raw_data']
     raw_data_path = raw_data_conf['path']
     feature_data_path = conf['feature_data']['path']
+
     if args.feature_engineering:
         fe_conf = conf['features']
         logger.info(f'Running feature engineering with config: {fe_conf}')
@@ -27,15 +30,17 @@ def main(args):
             target_dir=feature_data_path,
             window_length=fe_conf['window_length'], # in seconds
             overlap_percent=fe_conf['overlap_percent'], # in percent
+            feature_type=fe_conf['type'],
             frame_length=fe_conf['frame_length'], # in seconds
-            hop_length=fe_conf['hop_length'], # in seconds
+            hop_length=fe_conf.get('hop_length', -1), # in seconds
             buffer_flush_size=conf['feature_data']['buffer_flush_size'], # in features
-            n_fft=fe_conf['n_fft'],
-            n_mels=fe_conf['n_mels'],
+            n_fft=fe_conf.get('n_fft', -1),
+            n_mels=fe_conf.get('n_mels', -1),
             sr=conf['sr'],
             trim_top_db=fe_conf['trim_top_db'],
             test_data_ratio=conf['feature_data']['test_ratio']
         ).load()
+
     if args.train:
         if args.new_session:
             tf.keras.backend.clear_session()
@@ -68,18 +73,32 @@ def main(args):
         model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
         logger.info('Finished training, now evaluating...')
         model.evaluate(test_dataset)
+        
         if args.freeze_model:
-            path = f'frozen_models/{int(time.time())}'
+            epoch_time = int(time.time())
+            os.makedirs('frozen_models/full', exist_ok=True)
+            path = f'frozen_models/full/{epoch_time}'
             logger.info(f'Freezing trained model to ./{path}')
-            os.makedirs('frozen_models', exist_ok=True)
             model.save(path)
+            
+        if args.convert_to_lite:
+            # https://www.tensorflow.org/lite/convert/
+            assert(args.freeze_model), 'Must have frozen the model to convert it!'
+            converter = tf.lite.TFLiteConverter.from_saved_model(path)
+            tflite_model = converter.convert()
+            os.makedirs(f'frozen_models/tiny/{epoch_time}', exist_ok=True)
+            lite_path = f'frozen_models/tiny/{epoch_time}/model.tflite'
+            logger.info(f'Converting trained model to TFLite in ./{lite_path}')
+            with open(lite_path, 'wb') as f:
+                f.write(tflite_model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_file', type=str)
+    parser.add_argument('--config_file', type=str, default=None)
     parser.add_argument('--feature_engineering', action='store_true', default=False)
     parser.add_argument('--new_session', action='store_true', default=True)
     parser.add_argument('--freeze_model', action='store_true', default=False)
+    parser.add_argument('--convert_to_lite', action='store_true', default=False)
     parser.add_argument('--train', action='store_true', default=False)
     parser.add_argument('--test', action='store_true', default=False)
     args = parser.parse_args()

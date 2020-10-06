@@ -8,10 +8,6 @@ class FeatureExtractor:
         self,
         window_length, # in seconds
         overlap_percent, # in percent
-        frame_length, # in seconds
-        hop_length, # in seconds
-        n_fft=512,
-        n_mels=40,
         sr=16000,
         trim_top_db=30
     ):
@@ -19,15 +15,8 @@ class FeatureExtractor:
 
         # initial windowing
         self.window_length = int(window_length * sr)
-        self.frame_length = int(frame_length * sr)
-        self.hop_length = int(hop_length * sr)
         self.overlap = int(self.window_length * overlap_percent)
         self.trim_top_db = trim_top_db
-
-        # conversion of raw waveform windows into mel spectrogram
-        self.n_fft=n_fft
-        self.n_mels=n_mels
-        self.log_lift = 1e-6
 
     def _get_intervals(self, y):
         """
@@ -52,13 +41,32 @@ class FeatureExtractor:
                 windows.append(frame)
         return windows
 
-    def as_melspectrogram(self, y):
-        """
-        :param y: The raw waveform.
-        :type y: numpy.ndarray shape=[samples,]
-        :return: A log-spaced melspectrogram.
-        :rtype: numpy.ndarray
-        """
+class SpectrogramExtractor(FeatureExtractor):
+
+    def __init__(
+        self,
+        window_length, # in seconds
+        overlap_percent, # in percent
+        frame_length, # in seconds
+        hop_length, # in seconds
+        sr=16000,
+        n_fft=512,
+        n_mels=40,
+        trim_top_db=30
+    ):
+        super().__init__(
+            window_length=window_length,
+            overlap_percent=overlap_percent,
+            sr=sr,
+            trim_top_db=trim_top_db
+        )
+        self.hop_length = int(hop_length * sr)
+        self.frame_length = int(frame_length * sr)
+        self.n_fft=n_fft
+        self.n_mels=n_mels
+        self.log_lift = 1e-6
+
+    def as_features(self, y):
         for w in self._get_intervals(y):
             feature = librosa.feature.melspectrogram(
                 w,
@@ -69,3 +77,24 @@ class FeatureExtractor:
                 hop_length=self.hop_length
             )
             yield np.log10(feature + self.log_lift)
+
+
+class RawWaveformExtractor(FeatureExtractor):
+
+    def __init__(
+        self,
+        window_length, # in seconds
+        overlap_percent, # in percent
+        sr=16000,
+        trim_top_db=30
+    ):
+        super().__init__(
+            window_length=window_length,
+            overlap_percent=overlap_percent,
+            sr=sr,
+            trim_top_db=trim_top_db
+        )
+
+    def as_features(self, y):
+        for w in self._get_intervals(y):
+            yield w

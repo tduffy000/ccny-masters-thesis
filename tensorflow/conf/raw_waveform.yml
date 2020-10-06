@@ -9,16 +9,13 @@ feature_data:
   buffer_flush_size: 500 # for number of TFExamples in a TFRecord file
   test_ratio: 0.3
 features:
-  type: melspectrogram
-  window_length: 0.28125 # 180 frames (25 ms/frame)
+  type: raw
+  window_length: 0.28125
   overlap_percent: 0.5 # out of 1.0
-  frame_length: 0.025 # seconds
-  hop_length: 0.01 # seconds
-  n_fft: 512
-  n_mels: 40
+  frame_length: 0.025 # need this?
   trim_top_db: 20
 train:
-  epochs: 20
+  epochs: 10
   batch_size: 16
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:

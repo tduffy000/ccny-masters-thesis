@@ -10,8 +10,8 @@ import shutil
 import librosa
 import numpy as np
 import tensorflow as tf
-from features import FeatureExtractor
-from serializer import SpectrogramSerializer
+from features import RawWaveformExtractor, SpectrogramExtractor
+from serializer import RawWaveformSerializer, SpectrogramSerializer
 from logger import logger
 
 AUDIO_FILETYPES = ['.flac', '.wav']
@@ -30,9 +30,10 @@ class FeatureLoader:
         target_dir,
         window_length, # in seconds
         overlap_percent, # in percent
+        buffer_flush_size, # in features
+        feature_type, # { 'melspectrogram' | 'raw' }
         frame_length, # in seconds
         hop_length, # in seconds
-        buffer_flush_size, # in features
         n_fft=512,
         n_mels=40,
         sr=16000,
@@ -44,19 +45,31 @@ class FeatureLoader:
         self.target_dir = target_dir
         shutil.rmtree(self.target_dir, ignore_errors=True)
         os.makedirs(self.target_dir)
-        self.extractor = FeatureExtractor(
-            window_length=window_length,
-            overlap_percent=overlap_percent,
-            frame_length=frame_length,
-            hop_length=hop_length,
-            n_fft=n_fft,
-            n_mels=n_mels,
-            sr=sr,
-            trim_top_db=trim_top_db
-        )
+        if feature_type == 'melspectrogram':
+            self.extractor = MelSpectrogramExtractor(
+                window_length=window_length,
+                overlap_percent=overlap_percent,
+                frame_length=frame_length,
+                hop_length=hop_length,
+                n_fft=n_fft,
+                n_mels=n_mels,
+                sr=sr,
+                trim_top_db=trim_top_db
+            )
+            self.tf_serializer = SpectrogramSerializer()
+        elif feature_type == 'raw':
+            self.extractor = RawWaveformExtractor(
+                window_length=window_length,
+                overlap_percent=overlap_percent,
+                sr=sr,
+                trim_top_db=trim_top_db
+            )
+            self.tf_serializer = RawWaveformSerializer()
+        else:
+            raise Exception('Only feature_type: melspectrogram or raw is supported!')
         self.sr = sr
         self.num_files_created = 0
-        self.tf_serializer = SpectrogramSerializer()
+        
         self.feature_buffer = deque()
         self.buffer_flush_size = buffer_flush_size
         self.shape = None
@@ -124,10 +137,6 @@ class FeatureLoader:
         if len(speaker_files) == 0:
             raise RuntimeError('There are no files populated, make sure to call _get_audio_files first')
         train_files, test_files = {}, {}
-        # first we need to ensure the cardinality of speaker sets in both is equivalent
-        # note that this is train & test split with stratification ON;
-        # e.g. both have sets have equivalent class proportions (which may not be
-        # what we want as default behavior)
         for speaker, files in speaker_files.items():
             random.shuffle(files)
             split_idx = int(len(files) * (1 - test_ratio))
@@ -136,6 +145,7 @@ class FeatureLoader:
         return train_files, test_files
 
     # think about how we can de-couple this from the context
+    # this now needs to write out the GE2E version as opposed to current implementation
     def _raw_to_features(self, speaker_files, is_train):
         """
         """
@@ -148,7 +158,7 @@ class FeatureLoader:
             for f in files:
                 y, _ = librosa.load(f, sr=self.sr) # is this same for LibriSpeech & VoxCeleb1?
                 # TODO: this has to be generalized given we're building multiple inputs here
-                for feature in self.extractor.as_melspectrogram(y):
+                for feature in self.extractor.as_features(y):
                     if self.shape is None:
                         self.shape = feature.shape
                     self._validate_numeric(feature)
