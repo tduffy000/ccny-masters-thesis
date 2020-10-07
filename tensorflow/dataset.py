@@ -2,7 +2,7 @@ import json
 import os
 import tensorflow as tf
 from logger import logger
-from serializer import SpectrogramSerializer
+from serializer import RawWaveformSerializer, SpectrogramSerializer
 
 # TODO: batch_size is optional given GE2E
 class DatasetLoader:
@@ -11,12 +11,17 @@ class DatasetLoader:
         self,
         root_dir,
         batch_size,
-        example_dim
+        example_dim,
+        feature_type
     ):
         self.train_dir = f'{root_dir}/train'
         self.test_dir = f'{root_dir}/test'
         self.batch_size = batch_size
-        self.serializer = SpectrogramSerializer(example_dim=example_dim)
+        assert(feature_type in ['melspectrogram', 'raw']), 'Only feature_type raw or melspectrogram supported'
+        if feature_type == 'melspectrogram':
+            self.serializer = SpectrogramSerializer(example_dim=example_dim)
+        else:
+            self.serializer = RawWaveformSerializer(example_dim=example_dim)
         with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
             self.metadata['batch_size'] = self.batch_size

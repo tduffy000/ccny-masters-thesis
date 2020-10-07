@@ -93,10 +93,6 @@ class RawWaveformSerializer(FeatureSerializer):
         }
         example = tf.io.parse_example(proto, feature_map)
         channels, samples = example['waveform/channels'], example['waveform/samples']
-        # TODO: how to reshape these?
-        if self.example_dim == 2:
-            inputs = tf.reshape(example['spectrogram/encoded'], [height, width])
-        else: # 3
-            inputs = tf.reshape(example['spectrogram/encoded'], [height, width, 1])
+        inputs = tf.reshape(example['waveform/encoded'], [samples, channels])
         targets = example['speaker/speaker_id_index']
         return inputs, targets

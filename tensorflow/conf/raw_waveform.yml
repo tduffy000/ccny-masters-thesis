@@ -15,6 +15,7 @@ features:
   frame_length: 0.025 # need this?
   trim_top_db: 20
 train:
+  feature_type: raw # DRY with above
   epochs: 10
   batch_size: 16
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D

@@ -48,7 +48,8 @@ def main(args):
         dataset_loader = DatasetLoader(
             root_dir=feature_data_path,
             batch_size=train_conf['batch_size'],
-            example_dim=train_conf['input_dimensions']
+            example_dim=train_conf['input_dimensions'],
+            feature_type=train_conf['feature_type']
         )
         train_dataset, test_dataset = dataset_loader.get_dataset()
         model_conf = train_conf['network']

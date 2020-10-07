@@ -45,6 +45,7 @@ class FeatureLoader:
         self.target_dir = target_dir
         shutil.rmtree(self.target_dir, ignore_errors=True)
         os.makedirs(self.target_dir)
+        self.feature_type = feature_type
         if feature_type == 'melspectrogram':
             self.extractor = MelSpectrogramExtractor(
                 window_length=window_length,
@@ -159,8 +160,13 @@ class FeatureLoader:
                 y, _ = librosa.load(f, sr=self.sr) # is this same for LibriSpeech & VoxCeleb1?
                 # TODO: this has to be generalized given we're building multiple inputs here
                 for feature in self.extractor.as_features(y):
+                    # TODO: now this shape needs to handle raw waveforms
+                    # which have (samples, n_channels) or (n_channels, samples)
                     if self.shape is None:
-                        self.shape = feature.shape
+                        if self.feature_type == 'raw':
+                            self.shape = (feature.shape[0], 1)
+                        else:
+                            self.shape = feature.shape
                     self._validate_numeric(feature)
                     protobuf = self.tf_serializer.serialize(feature, int(speaker), f)
                     self.feature_buffer.append(protobuf)
