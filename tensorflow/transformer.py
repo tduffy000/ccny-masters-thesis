@@ -47,7 +47,7 @@ class FeatureLoader:
         os.makedirs(self.target_dir)
         self.feature_type = feature_type
         if feature_type == 'melspectrogram':
-            self.extractor = MelSpectrogramExtractor(
+            self.extractor = SpectrogramExtractor(
                 window_length=window_length,
                 overlap_percent=overlap_percent,
                 frame_length=frame_length,
