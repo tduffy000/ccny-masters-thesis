@@ -3,8 +3,8 @@ import yaml
 
 class Config:
 
-    def __init__(self):
-        pass
+    def __init__(self, raw_yaml):
+        self.raw_yaml = raw_yaml
 
     def as_dict(self):
         return vars(self)
@@ -17,28 +17,14 @@ class Config:
 
 class RawDataConfig(Config):
 
-    def __init__(self, path):
-        super(RawDataConfig, self).__init__()
-        self.path = path
+    def __init__(self, raw_yaml):
+        super(RawDataConfig, self).__init__(raw_yaml)
+        self.path = raw_yaml.get('path', None)
 
 class FeatureConfig(Config):
 
-    def __init__(
-        self,
-        path,
-        type,
-        window_length,
-        overlap_percent,
-        frame_length, # seconds
-        hop_length, # seconds
-        n_fft,
-        n_mels,
-        use_preemphasis,
-        trim_silence,
-        trim_top_db,
-        normalization
-    ):
-        super(FeatureConfig, self).__init__()
+    def __init__(self, raw_yaml):
+        super(FeatureConfig, self).__init__(raw_yaml)
         self.path = path
         self.type = type
         self.window_length = window_length
@@ -56,10 +42,7 @@ class TrainingConfig(Config):
 
     def __init__(
         self,
-        epochs,
-        batch_size,
-        input_dimensions,
-        network_config
+        raw_yaml
     ):
         super(TrainingConfig, self).__init__()
         self.epochs = epochs

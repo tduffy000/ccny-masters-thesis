@@ -4,10 +4,23 @@ import os
 import time
 import tensorflow as tf
 from logger import logger
-from dataset import DatasetLoader
-from transformer import FeatureLoader
+from ge2e_dataset import GE2EDatasetLoader
+from ge2e_transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
 from utils import get_callback, get_optimizer
+from loss import similarity_matrix, embedding_loss
+
+def feature_engineering(data_conf, fe_conf):
+    pass
+
+def train(train_conf):
+    pass
+
+def freeze(freeze_conf):
+    pass
+
+def convert_to_tflite():
+    pass
 
 # TODO: we could probably put these into a Config object
 def main(args):
@@ -24,7 +37,7 @@ def main(args):
     if args.feature_engineering:
         fe_conf = conf['features']
         logger.info(f'Running feature engineering with config: {fe_conf}')
-        FeatureLoader(
+        GE2EBatchLoader(
             root_dir=raw_data_path,
             datasets=raw_data_conf['datasets'],
             target_dir=feature_data_path,
@@ -32,24 +45,19 @@ def main(args):
             overlap_percent=fe_conf['overlap_percent'], # in percent
             frame_length=fe_conf['frame_length'], # in seconds
             hop_length=fe_conf.get('hop_length', -1), # in seconds
-            buffer_flush_size=conf['feature_data']['buffer_flush_size'], # in features
             n_fft=fe_conf.get('n_fft', -1),
             n_mels=fe_conf.get('n_mels', -1),
             sr=conf['sr'],
             trim_top_db=fe_conf['trim_top_db'],
-            test_data_ratio=conf['feature_data']['test_ratio']
         ).load()
 
     if args.train:
         if args.new_session:
             tf.keras.backend.clear_session()
         train_conf = conf['train']
-        dataset_loader = DatasetLoader(
-            root_dir=feature_data_path,
-            batch_size=train_conf['batch_size'],
-            example_dim=train_conf['input_dimensions']
-        )
-        train_dataset, test_dataset = dataset_loader.get_dataset()
+        dataset_loader = GE2EDatasetLoader(feature_data_path)
+        # train_dataset, test_dataset = dataset_loader.get_dataset()
+        train_dataset = dataset_loader.get_dataset()
         model_conf = train_conf['network']
         dataset_metadata = dataset_loader.get_metadata()
         model = SpeakerVerificationModel(model_conf, dataset_metadata)
@@ -60,6 +68,7 @@ def main(args):
             rho=model_conf['optimizer'].get('rho', 0.9), # default for tf.keras.optimizers.RMSprop
             epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
         )
+        # TODO: loss should just be our custom one
         model.compile(
             optimizer=optim,
             loss=model_conf['loss'],
@@ -71,7 +80,7 @@ def main(args):
             callbacks.append(get_callback(callback, conf, lr=model_conf['optimizer']['lr']))
         model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
         logger.info('Finished training, now evaluating...')
-        model.evaluate(test_dataset)
+        # model.evaluate(test_dataset)
         
         if args.freeze_model:
             epoch_time = int(time.time())

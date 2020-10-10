@@ -15,8 +15,9 @@ from serializer import SpectrogramSerializer
 from logger import logger
 
 AUDIO_FILETYPES = ['.flac', '.wav']
+FILE_THRESHOLD = 5
 
-class FeatureLoader:
+class GE2EBatchLoader:
     """
     Loads the raw .flac files and is responsible for performing:
     |-- feature extraction (mel spectrograms)
@@ -30,14 +31,14 @@ class FeatureLoader:
         target_dir,
         window_length, # in seconds
         overlap_percent, # in percent
-        buffer_flush_size, # in features
         frame_length, # in seconds
         hop_length, # in seconds
         n_fft=512,
         n_mels=40,
         sr=16000,
         trim_top_db=30,
-        test_data_ratio=0.2
+        speakers_per_batch=20,
+        utterances_per_speaker=10
     ):
         self.root_dir = root_dir
         self.datasets = datasets
@@ -58,10 +59,10 @@ class FeatureLoader:
         self.sr = sr
         self.num_files_created = 0
         
-        self.feature_buffer = deque()
-        self.buffer_flush_size = buffer_flush_size
         self.shape = None
-        self.test_data_ratio = test_data_ratio
+
+        self.speakers_per_batch = speakers_per_batch
+        self.utterances_per_speaker = utterances_per_speaker
 
     @staticmethod
     def _validate_numeric(feature):
@@ -110,88 +111,77 @@ class FeatureLoader:
                 speaker_files[speaker_id] = d + paths
         return speaker_files
 
-    @staticmethod
-    def _train_test_split_files(speaker_files, test_ratio):
-        """
-        Takes a mapping of files: speaker_id -> [speaker specific files] and then
-        partitions them into disjoint training and test sets with the same format.
+    def _update_shape(self, feature):
+        if self.shape is None:
+            self.shape = feature.shape
 
-        :param speaker_files: A mapping of speaker_id -> [files]
-        :type speaker_files: {speaker_id -> [files]}
-        :param test_ratio: The ratio (0, 1.0] of files to place in the test set.
-        :type test_ratio: float
-        :return: ({speaker_id -> [files]}, {speaker_id -> [files]})
+    def _build_batch(self, n_speakers, utterances_per_speaker):
         """
-        if len(speaker_files) == 0:
-            raise RuntimeError('There are no files populated, make sure to call _get_audio_files first')
-        train_files, test_files = {}, {}
-        for speaker, files in speaker_files.items():
-            random.shuffle(files)
-            split_idx = int(len(files) * (1 - test_ratio))
-            train_files[speaker] = files[:split_idx]
-            test_files[speaker] = files[split_idx:]
-        return train_files, test_files
-
-    # think about how we can de-couple this from the context
-    # this now needs to write out the GE2E version as opposed to current implementation
-    def _raw_to_features(self, speaker_files, is_train):
+        Build the batches of N speakers each having M utterances and write them each 
+        to a TFRecord file.
         """
-        """
-        # TODO: we need to ensure that the buffer is flushed at the end of this dataset too
-        # otherwise we'll hit an overlap
-        subdir = 'train' if is_train else 'test'
-        os.makedirs(f'{self.target_dir}/{subdir}')
-        num_files_created = 0
-        for speaker, files in speaker_files.items():
-            for f in files:
-                y, _ = librosa.load(f, sr=self.sr) # is this same for LibriSpeech & VoxCeleb1?
+        # random choose N speakers
+        speaker_set = random.choices(list(self.speaker_files.keys()), k=n_speakers)
+        batch = []
+        for i, speaker in enumerate(speaker_set, start=1):
+            # pop files and write from their files until we fill utterance_per_speaker (M)
+            files = self.speaker_files[speaker]
+            while len(batch) < i * utterances_per_speaker:
+                # what if the below throws an IndexError?
+                f = files.pop()
+                y, _ = librosa.load(f, sr=self.sr)
                 for feature in self.extractor.as_features(y):
-                    if self.shape is None:
-                        self.shape = feature.shape
+                    self._update_shape(feature)
                     self._validate_numeric(feature)
                     protobuf = self.tf_serializer.serialize(feature, int(speaker), f)
-                    self.feature_buffer.append(protobuf)
-                    if len(self.feature_buffer) == self.buffer_flush_size:
-                        path = f'{self.target_dir}/{subdir}/{subdir}_shard_{num_files_created+1:05d}.tfrecords'
-                        logger.info(f'Flushing feature buffer into: {path}')
-                        with tf.io.TFRecordWriter(path) as writer:
-                            while True:
-                                if len(self.feature_buffer) == 0:
-                                    break
-                                example = self.feature_buffer.pop()
-                                writer.write(example.SerializeToString())
-                        self.feature_buffer = deque()
-                        num_files_created += 1
-        return num_files_created
+                    # make sure we only get M utterances
+                    if len(batch) < i * utterances_per_speaker:
+                        batch.append(protobuf)
+        random.shuffle(batch)
+        return batch
+
+    def _write_batch(self, batch, is_train=True):
+        subdir = 'train' if is_train else 'test'
+        subdir_path = f'{self.target_dir}/{subdir}'
+        if not os.path.exists(subdir_path):
+            os.makedirs(subdir_path)
+        path = f'{self.target_dir}/{subdir}/{subdir}_batch_{self.num_files_created+1:05d}.tfrecords'
+        logger.info(f'Flushing batch into: {path}')
+        with tf.io.TFRecordWriter(path) as writer:
+            for example in batch:
+                writer.write(example.SerializeToString())
+        self.num_files_created += 1
 
     def load(self):
-        """
-        Loads the raw .flac files contained in the LibriSpeech url's raw directory
-        and performs the feature engineering steps defined by the FeatureExtractor
-        and then writes them into TFRecord shard files so they can be loaded as
-        a tf.data.TFRecordDatset.
-        """
         file_lists = {}
         for dataset, subsets in self.datasets.items():
             dataset_path = f'{self.root_dir}/{dataset}'
             for subset in subsets:
                 subset_path = f'{dataset_path}/{subset}'
-                speaker_files = self._get_audio_files(subset_path)
-                for speaker, files in speaker_files.items():
-                    file_list = file_lists.get(speaker, []) + files
-                    file_lists[speaker] = file_list
+                # how to concatenate multiple datasets here?
+                self.speaker_files = self._get_audio_files(subset_path)
 
-        files_created = 0
-        train, test = self._train_test_split_files(file_lists, test_ratio=self.test_data_ratio)
-        files_created += self._raw_to_features(train, is_train=True)
-        files_created += self._raw_to_features(test, is_train=False)
+        batches_remain = True
+        while batches_remain:
+            batch = self._build_batch(self.speakers_per_batch, self.utterances_per_speaker)
+            self._write_batch(batch)
 
+            # remove speaker keys with files remaining < file threshold
+            keys_to_remove = []
+            for k, v in self.speaker_files.items():
+                if len(v) < FILE_THRESHOLD:
+                    keys_to_remove.append(k)
+            for k in keys_to_remove:
+                self.speaker_files.pop(k, None)
+
+            # check if we have at leats N speakers left to build a batch
+            batches_remain = len(self.speaker_files) >= self.speakers_per_batch
+
+        # generalize to merged datasets
         metadata = {
-            'speaker_id_mapping': self.tf_serializer.speaker_id_mapping,
-            'shape': self.shape,
-            'total_files': files_created,
-            'examples_per_file': self.buffer_flush_size,
-            'test_ratio': self.test_data_ratio,
+            'feature_shape': self.shape,
+            'files_created': self.num_files_created,
+            'batch_size': self.speakers_per_batch * self.utterances_per_speaker,
             'datasets': self.datasets
         }
         logger.info(f'Finished creating features, with metadata: {metadata}')

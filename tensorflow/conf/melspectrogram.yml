@@ -6,21 +6,19 @@ raw_data:
       - dev-clean
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
-  buffer_flush_size: 500 # for number of TFExamples in a TFRecord file
-  test_ratio: 0.3
+  speakers_per_batch: 20     # N
+  utterances_per_speaker: 20 # M
 features:
   type: melspectrogram
   window_length: 0.28125
   overlap_percent: 0.5 # out of 1.0
-  frame_length: 0.025 # seconds
-  hop_length: 0.01 # seconds
+  frame_length: 0.025  # seconds
+  hop_length: 0.01     # seconds
   n_fft: 512
   n_mels: 40
   trim_top_db: 20
 train:
-  feature_type: melspectrogram # DRY with above
   epochs: 20
-  batch_size: 16
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:
     loss: sparse_categorical_crossentropy
@@ -49,8 +47,7 @@ train:
       - fc:
           nodes: 512
       - embedding:
-          nodes: 64
-      - output
+          nodes: 32
     callbacks:
       tensorboard:
         log_dir: .tensorboard_logs

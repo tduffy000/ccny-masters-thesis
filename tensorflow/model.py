@@ -8,9 +8,11 @@ class SpeakerVerificationModel(tf.keras.Model):
 
     def __init__(self, conf, dataset_metadata):
         super(SpeakerVerificationModel, self).__init__()
-        self.n_classes = len(dataset_metadata['speaker_id_mapping'])
         self.layer_list = [
-            tf.keras.layers.Input(shape=dataset_metadata['shape'], batch_size=dataset_metadata['batch_size'])
+            tf.keras.layers.Input(
+                shape=dataset_metadata['feature_shape'],
+                batch_size=dataset_metadata['batch_size']
+            )
         ]
         self.model = self._parse_layer_conf(conf['layers'])
 
@@ -101,8 +103,6 @@ class SpeakerVerificationModel(tf.keras.Model):
                 self.layer_list += self.get_fc(layer['nodes'])
             elif layer_type == 'embedding':
                 self.layer_list += self.get_fc(layer['nodes'])
-            elif layer_type == 'output':
-                self.layer_list += self.get_fc(self.n_classes, 'softmax')
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):

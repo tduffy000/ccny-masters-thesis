@@ -4,22 +4,19 @@ import tensorflow as tf
 from logger import logger
 from serializer import SpectrogramSerializer
 
-# TODO: batch_size is optional given GE2E
-class DatasetLoader:
+class GE2EDatasetLoader:
 
     def __init__(
         self,
-        root_dir,
-        batch_size,
-        example_dim,
+        root_dir
     ):
         self.train_dir = f'{root_dir}/train'
         self.test_dir = f'{root_dir}/test'
-        self.batch_size = batch_size
-        self.serializer = SpectrogramSerializer(example_dim=example_dim)
         with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
-            self.metadata['batch_size'] = self.batch_size
+            self.batch_size = self.metadata['batch_size']
+            self.example_dim = len(self.metadata['feature_shape'])
+        self.serializer = SpectrogramSerializer(example_dim=self.example_dim)
         logger.info(f'Creating dataset with following metadata: {self.metadata}')
 
     def _prep_dataset(self, dir):
@@ -30,7 +27,6 @@ class DatasetLoader:
         batch_dataset = raw_dataset\
                             .shuffle(len(tfrecord_file_paths))\
                             .map(self.serializer.deserialize)\
-                            .shuffle(self.batch_size * self.metadata['examples_per_file'])\
                             .batch(self.batch_size, drop_remainder=True)
         return batch_dataset
 
@@ -47,5 +43,5 @@ class DatasetLoader:
 
     def get_dataset(self):
         train_dataset = self._prep_dataset(self.train_dir)
-        test_dataset = self._prep_dataset(self.test_dir)
-        return train_dataset, test_dataset
+        # test_dataset = self._prep_dataset(self.test_dir)
+        return train_dataset#, test_dataset
