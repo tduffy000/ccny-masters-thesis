@@ -18,7 +18,8 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 10
+  feature_type: melspectrogram # DRY with above
+  epochs: 20
   batch_size: 16
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:

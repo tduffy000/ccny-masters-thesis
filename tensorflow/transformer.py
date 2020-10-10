@@ -10,8 +10,8 @@ import shutil
 import librosa
 import numpy as np
 import tensorflow as tf
-from features import RawWaveformExtractor, SpectrogramExtractor
-from serializer import RawWaveformSerializer, SpectrogramSerializer
+from features import SpectrogramExtractor
+from serializer import SpectrogramSerializer
 from logger import logger
 
 AUDIO_FILETYPES = ['.flac', '.wav']
@@ -31,7 +31,6 @@ class FeatureLoader:
         window_length, # in seconds
         overlap_percent, # in percent
         buffer_flush_size, # in features
-        feature_type, # { 'melspectrogram' | 'raw' }
         frame_length, # in seconds
         hop_length, # in seconds
         n_fft=512,
@@ -45,29 +44,17 @@ class FeatureLoader:
         self.target_dir = target_dir
         shutil.rmtree(self.target_dir, ignore_errors=True)
         os.makedirs(self.target_dir)
-        self.feature_type = feature_type
-        if feature_type == 'melspectrogram':
-            self.extractor = SpectrogramExtractor(
-                window_length=window_length,
-                overlap_percent=overlap_percent,
-                frame_length=frame_length,
-                hop_length=hop_length,
-                n_fft=n_fft,
-                n_mels=n_mels,
-                sr=sr,
-                trim_top_db=trim_top_db
-            )
-            self.tf_serializer = SpectrogramSerializer()
-        elif feature_type == 'raw':
-            self.extractor = RawWaveformExtractor(
-                window_length=window_length,
-                overlap_percent=overlap_percent,
-                sr=sr,
-                trim_top_db=trim_top_db
-            )
-            self.tf_serializer = RawWaveformSerializer()
-        else:
-            raise Exception('Only feature_type: melspectrogram or raw is supported!')
+        self.extractor = SpectrogramExtractor(
+            window_length=window_length,
+            overlap_percent=overlap_percent,
+            frame_length=frame_length,
+            hop_length=hop_length,
+            n_fft=n_fft,
+            n_mels=n_mels,
+            sr=sr,
+            trim_top_db=trim_top_db
+        )
+        self.tf_serializer = SpectrogramSerializer()
         self.sr = sr
         self.num_files_created = 0
         
@@ -158,15 +145,9 @@ class FeatureLoader:
         for speaker, files in speaker_files.items():
             for f in files:
                 y, _ = librosa.load(f, sr=self.sr) # is this same for LibriSpeech & VoxCeleb1?
-                # TODO: this has to be generalized given we're building multiple inputs here
                 for feature in self.extractor.as_features(y):
-                    # TODO: now this shape needs to handle raw waveforms
-                    # which have (samples, n_channels) or (n_channels, samples)
                     if self.shape is None:
-                        if self.feature_type == 'raw':
-                            self.shape = (feature.shape[0], 1)
-                        else:
-                            self.shape = feature.shape
+                        self.shape = feature.shape
                     self._validate_numeric(feature)
                     protobuf = self.tf_serializer.serialize(feature, int(speaker), f)
                     self.feature_buffer.append(protobuf)

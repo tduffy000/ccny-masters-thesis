@@ -30,7 +30,6 @@ def main(args):
             target_dir=feature_data_path,
             window_length=fe_conf['window_length'], # in seconds
             overlap_percent=fe_conf['overlap_percent'], # in percent
-            feature_type=fe_conf['type'],
             frame_length=fe_conf['frame_length'], # in seconds
             hop_length=fe_conf.get('hop_length', -1), # in seconds
             buffer_flush_size=conf['feature_data']['buffer_flush_size'], # in features
@@ -48,8 +47,7 @@ def main(args):
         dataset_loader = DatasetLoader(
             root_dir=feature_data_path,
             batch_size=train_conf['batch_size'],
-            example_dim=train_conf['input_dimensions'],
-            feature_type=train_conf['feature_type']
+            example_dim=train_conf['input_dimensions']
         )
         train_dataset, test_dataset = dataset_loader.get_dataset()
         model_conf = train_conf['network']

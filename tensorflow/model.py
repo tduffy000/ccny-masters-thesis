@@ -20,15 +20,16 @@ class SpeakerVerificationModel(tf.keras.Model):
         kernel_size,
         dropout_prob=0.1,
         use_batchnorm=True,
-        pooling='max'
+        pooling=None,
+        pool_size=None
     ):
         layers = [tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size)]
         if use_batchnorm:
             layers += [tf.keras.layers.BatchNormalization()]
         if pooling == 'max':
-            layers += []
+            layers += [tf.keras.layers.MaxPooling1D(pool_size=pool_size)]
         if pooling == 'avg':
-            layers += []
+            layers += [tf.keras.layers.AveragePooling1D(pool_size=pool_size)]
         if dropout_prob > 0.0:
             layers += [tf.keras.layers.Dropout(dropout_prob)]
         return layers
@@ -68,9 +69,9 @@ class SpeakerVerificationModel(tf.keras.Model):
             inner_layer = tf.keras.layers.GRU(kwargs['units'])
         return [tf.keras.layers.Bidirectional(inner_layer)]
 
-    @staticmethod
-    def get_global_pooling():
-        pass
+    # @staticmethod
+    # def get_global_pooling():
+    #     if layer_type == ''
 
     @staticmethod
     def get_fc(nodes, activation='relu'):

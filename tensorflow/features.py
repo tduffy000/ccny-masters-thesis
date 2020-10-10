@@ -77,24 +77,3 @@ class SpectrogramExtractor(FeatureExtractor):
                 hop_length=self.hop_length
             )
             yield np.log10(feature + self.log_lift)
-
-
-class RawWaveformExtractor(FeatureExtractor):
-
-    def __init__(
-        self,
-        window_length, # in seconds
-        overlap_percent, # in percent
-        sr=16000,
-        trim_top_db=30
-    ):
-        super().__init__(
-            window_length=window_length,
-            overlap_percent=overlap_percent,
-            sr=sr,
-            trim_top_db=trim_top_db
-        )
-
-    def as_features(self, y):
-        for w in self._get_intervals(y):
-            yield w
