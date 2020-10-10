@@ -23,13 +23,6 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
         self.speakers_per_batch = speakers_per_batch
 
     def call(self, inputs):
-        """
-        Calculate the similarity matrix from an input embedded utterance batch.
-        Input shape:
-            [N * M x embedding length]
-        Output shape:
-            [N * M x N]
-        """
 
         # compute similarity matrix from the embedding layer
         batch_size, P = inputs.shape
@@ -54,8 +47,8 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
                 [tf.concat([tf.math.reduce_sum(center[i:(i + 1), :] * embedded_split[j, :, :], axis=1, keepdims=True) for i
                             in range(N)],
                         axis=1) for j in range(N)], axis=0)
-        print(f'S: {S}')
-        return tf.abs(self.w)*S+self.b
+        S = tf.abs(self.w)*S+self.b
+        return S
 
 class SpeakerVerificationModel(tf.keras.Model):
 
