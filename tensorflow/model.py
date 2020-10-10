@@ -4,6 +4,59 @@ architecture.
 """
 import tensorflow as tf
 
+class SimilarityMatrixLayer(tf.keras.layers.Layer):
+
+    def __init__(self, speakers_per_batch):
+        super(SimilarityMatrixLayer, self).__init__()
+        self.w = tf.Variable(
+            initial_value=5.,
+            trainable=True,
+            name='similarity_matrix/weights',
+            dtype=tf.float32
+        )
+        self.b = tf.Variable(
+            initial_value=10.,
+            trainable=True,
+            name='similarity_matrix/bias',
+            dtype=tf.float32
+        )
+        self.speakers_per_batch = speakers_per_batch
+
+    def call(self, inputs):
+        """
+        Calculate the similarity matrix from an input embedded utterance batch.
+        Input shape:
+            [N * M x embedding length]
+        Output shape:
+            [N * M x N]
+        """
+
+        # compute similarity matrix from the embedding layer
+        batch_size, P = inputs.shape
+        M = batch_size // self.speakers_per_batch
+        N = self.speakers_per_batch 
+        embedded_split = tf.reshape(inputs, shape=[N, M, P])
+
+        center=None
+
+        if center is None:
+            center = tf.math.l2_normalize(tf.math.reduce_mean(embedded_split, axis=1))              # [N,P] normalized center vectors eq.(1)
+            center_except = tf.math.l2_normalize(tf.reshape(tf.math.reduce_sum(embedded_split, axis=1, keepdims=True)
+                                                - embedded_split, shape=[N*M,P]))  # [NM,P] center vectors eq.(8)
+            # make similarity matrix eq.(9)
+            S = tf.concat(
+                [tf.concat([tf.math.reduce_sum(center_except[i*M:(i+1)*M,:]*embedded_split[j,:,:], axis=1, keepdims=True) if i==j
+                            else tf.math.reduce_sum(center[i:(i+1),:]*embedded_split[j,:,:], axis=1, keepdims=True) for i in range(N)],
+                        axis=1) for j in range(N)], axis=0)
+        else :
+            # If center(enrollment) exist, use it.
+            S = tf.concat(
+                [tf.concat([tf.math.reduce_sum(center[i:(i + 1), :] * embedded_split[j, :, :], axis=1, keepdims=True) for i
+                            in range(N)],
+                        axis=1) for j in range(N)], axis=0)
+        print(f'S: {S}')
+        return tf.abs(self.w)*S+self.b
+
 class SpeakerVerificationModel(tf.keras.Model):
 
     def __init__(self, conf, dataset_metadata):
@@ -14,6 +67,7 @@ class SpeakerVerificationModel(tf.keras.Model):
                 batch_size=dataset_metadata['batch_size']
             )
         ]
+        self.speakers_per_batch = dataset_metadata['speakers_per_batch']
         self.model = self._parse_layer_conf(conf['layers'])
 
     @staticmethod
@@ -103,6 +157,8 @@ class SpeakerVerificationModel(tf.keras.Model):
                 self.layer_list += self.get_fc(layer['nodes'])
             elif layer_type == 'embedding':
                 self.layer_list += self.get_fc(layer['nodes'])
+            elif layer_type == 'similarity_matrix':
+                self.layer_list += [SimilarityMatrixLayer(self.speakers_per_batch)]
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):

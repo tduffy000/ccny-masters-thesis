@@ -182,6 +182,8 @@ class GE2EBatchLoader:
             'feature_shape': self.shape,
             'files_created': self.num_files_created,
             'batch_size': self.speakers_per_batch * self.utterances_per_speaker,
+            'speakers_per_batch': self.speakers_per_batch,
+            'utterances_per_speaker': self.utterances_per_speaker,
             'datasets': self.datasets
         }
         logger.info(f'Finished creating features, with metadata: {metadata}')

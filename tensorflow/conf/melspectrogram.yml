@@ -48,6 +48,7 @@ train:
           nodes: 512
       - embedding:
           nodes: 32
+      - similarity_matrix # TODO: add initial values
     callbacks:
       tensorboard:
         log_dir: .tensorboard_logs

@@ -8,7 +8,7 @@ from ge2e_dataset import GE2EDatasetLoader
 from ge2e_transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
 from utils import get_callback, get_optimizer
-from loss import similarity_matrix, embedding_loss
+from loss import get_embedding_loss
 
 def feature_engineering(data_conf, fe_conf):
     pass
@@ -49,6 +49,8 @@ def main(args):
             n_mels=fe_conf.get('n_mels', -1),
             sr=conf['sr'],
             trim_top_db=fe_conf['trim_top_db'],
+            speakers_per_batch=conf['feature_data']['speakers_per_batch'],
+            utterances_per_speaker=conf['feature_data']['utterances_per_speaker']
         ).load()
 
     if args.train:
@@ -68,11 +70,14 @@ def main(args):
             rho=model_conf['optimizer'].get('rho', 0.9), # default for tf.keras.optimizers.RMSprop
             epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
         )
-        # TODO: loss should just be our custom one
+
+        # TODO: add metrics
+        # N = num speaker / batch; M = utterances / speaker
+        N = conf['feature_data']['speakers_per_batch']
+        M = conf['feature_data']['utterances_per_speaker']
         model.compile(
             optimizer=optim,
-            loss=model_conf['loss'],
-            metrics=['accuracy'] # add metrics for the embeddings & separation
+            loss=get_embedding_loss(N, M)
         )
         callbacks = []
         for callback, conf in model_conf['callbacks'].items():
