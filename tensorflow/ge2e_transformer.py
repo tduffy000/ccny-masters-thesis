@@ -27,7 +27,8 @@ class GE2EBatchLoader:
     def __init__(
         self,
         root_dir,
-        datasets,
+        train_datasets,
+        test_datasets,
         target_dir,
         window_length, # in seconds
         overlap_percent, # in percent
@@ -41,7 +42,8 @@ class GE2EBatchLoader:
         utterances_per_speaker=10
     ):
         self.root_dir = root_dir
-        self.datasets = datasets
+        self.train_datasets = train_datasets
+        self.test_datasets = test_datasets
         self.target_dir = target_dir
         shutil.rmtree(self.target_dir, ignore_errors=True)
         os.makedirs(self.target_dir)
@@ -92,7 +94,7 @@ class GE2EBatchLoader:
                 return True
         return False
 
-    def _get_audio_files(self, source_dir):
+    def _get_audio_files(self, speaker_files, source_dir):
         """
         Walks the source directory tree and pulls out .flac files, creating a
         mapping of speaker_id -> [speaker specific files].
@@ -101,7 +103,6 @@ class GE2EBatchLoader:
         :type source_dir: str
         :return: {speaker_id -> [speaker specific files]}
         """
-        speaker_files = {}
         for root, dirs, files in os.walk(source_dir):
             if files and not dirs:
                 # how do you pull out a VoxCeleb ID?
@@ -152,13 +153,15 @@ class GE2EBatchLoader:
         self.num_files_created += 1
 
     def load(self):
-        file_lists = {}
-        for dataset, subsets in self.datasets.items():
+
+        self.speaker_files = {}
+        # TODO: extend to test dataset
+        for dataset, subsets in self.train_datasets.items():
             dataset_path = f'{self.root_dir}/{dataset}'
             for subset in subsets:
                 subset_path = f'{dataset_path}/{subset}'
                 # how to concatenate multiple datasets here?
-                self.speaker_files = self._get_audio_files(subset_path)
+                self.speaker_files = self._get_audio_files(self.speaker_files, subset_path)
 
         batches_remain = True
         while batches_remain:
@@ -183,7 +186,10 @@ class GE2EBatchLoader:
             'batch_size': self.speakers_per_batch * self.utterances_per_speaker,
             'speakers_per_batch': self.speakers_per_batch,
             'utterances_per_speaker': self.utterances_per_speaker,
-            'datasets': self.datasets
+            'datasets': {
+                'train': self.train_datasets,
+                'test': self.test_datasets
+            }
         }
         logger.info(f'Finished creating features, with metadata: {metadata}')
         with open(f'{self.target_dir}/metadata.json', 'w') as stream:

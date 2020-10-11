@@ -17,7 +17,8 @@ def feature_engineering(conf):
 
     GE2EBatchLoader(
         root_dir=raw_data_conf['path'],
-        datasets=raw_data_conf['datasets'],
+        train_datasets=raw_data_conf['datasets']['train'],
+        test_datasets=raw_data_conf['datasets']['test'],
         target_dir=fe_data_conf['path'],
         window_length=fe_conf['window_length'], # in seconds
         overlap_percent=fe_conf['overlap_percent'], # in percent
@@ -63,6 +64,7 @@ def train(conf):
     return model
 
 def evaluate(conf):
+# https://www.tensorflow.org/api_docs/python/tf/keras/Model#make_test_function
     pass
 
 def freeze(conf):

@@ -1,9 +1,14 @@
 sr: 16000
 raw_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
-  datasets:
-    LibriSpeech:
-      - dev-clean
+  datasets: # need train / test splits
+    train:
+      LibriSpeech:
+        - dev-clean
+        - dev-other
+    test:
+      LibriSpeech:
+        - test-clean
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   N: 20 # speakers per batch

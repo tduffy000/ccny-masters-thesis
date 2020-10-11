@@ -9,12 +9,12 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
     def __init__(self, N, M, P):
         super(SimilarityMatrixLayer, self).__init__()
         self.w = tf.Variable(
-            initial_value=5.,
+            initial_value=10.,
             trainable=True,
             name='similarity_matrix/weights'
         )
         self.b = tf.Variable(
-            initial_value=10.,
+            initial_value=-5.,
             trainable=True,
             name='similarity_matrix/bias'
         )

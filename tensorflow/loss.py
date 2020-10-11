@@ -2,7 +2,6 @@
 # @see https://arxiv.org/abs/1710.10467
 import tensorflow as tf
 import numpy as np
-from scipy.spatial.distance import cosine
 
 def get_embedding_loss(N, M):
     """
@@ -22,3 +21,21 @@ def get_embedding_loss(N, M):
             -1 * S_true + tf.math.log(tf.math.reduce_sum(tf.exp(S), axis=1, keepdims=True) + 1e-6)
         )
     return loss
+
+def false_acceptance_ratio():
+    """
+    The ratio of falsely accepted impostor speakers over all scored impostors (type II errors).
+    """
+    pass
+
+def false_rejection_ratio():
+    """
+    The ratio of falsely rejected geniune speakers over all genuine speakers (type I errors).
+    """
+    pass
+
+def equal_error_ratio(far, frr):
+    """
+    The ratio at which FAR and FRR (defined above) are equivalent.
+    """
+    return np.mean([far, frr])

@@ -24,8 +24,8 @@ class GE2EDatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
         raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
+        # TODO: need to figure out how to shuffle the batches
         batch_dataset = raw_dataset\
-                            .shuffle(len(tfrecord_file_paths))\
                             .map(self.serializer.deserialize)\
                             .batch(self.batch_size, drop_remainder=True)
         return batch_dataset

@@ -1,12 +1,13 @@
 import tensorflow as tf
 import numpy as np
 
+# TODO: add dataset field
 class FeatureSerializer:
 
     def __init__(self, example_dim=3):
         assert(example_dim in [2,3])
         self.example_dim = example_dim
-        self.speaker_id_mapping = {}
+        self.speaker_id_mapping = {} # TODO: this will need to be dataset aware with inclusion of VoxCeleb
 
     @staticmethod
     def _int64_feature(value):
@@ -53,7 +54,8 @@ class SpectrogramSerializer(FeatureSerializer):
             'spectrogram/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
             'speaker/orig_speaker_id': tf.io.FixedLenFeature([], tf.int64),
             'speaker/speaker_id_index': tf.io.FixedLenFeature([], tf.int64),
-            'data/file': tf.io.FixedLenFeature([], tf.string)
+            'data/file': tf.io.FixedLenFeature([], tf.string),
+            'data/dataset': tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_example(proto, feature_map)
         height, width = example['spectrogram/height'], example['spectrogram/width']
