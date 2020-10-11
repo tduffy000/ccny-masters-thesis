@@ -1,7 +1,7 @@
 sr: 16000
 raw_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
-  datasets: # need train / test splits
+  datasets:
     train:
       LibriSpeech:
         - dev-clean
@@ -23,8 +23,7 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 100
-  input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
+  epochs: 50
   network:
     optimizer:
       type: Adam

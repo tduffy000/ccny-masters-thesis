@@ -9,26 +9,25 @@ def get_embedding_loss(N, M):
         N: The number of unique speakers in a batch.
         M: The number of utterances from each speaker in a batch.
     """
-    
     # cosine similarity is 1.0 if from same speaker, otherwise 0
     S_true = np.zeros((N*M, N))
     for i in range(N):
         S_true[i*M:i*M+M,i] = 1.0
 
     def loss(_, S):
-        # Eq (6)
+        # Eq (6) & Eq (10)
         return tf.math.reduce_sum(
             -1 * S_true + tf.math.log(tf.math.reduce_sum(tf.exp(S), axis=1, keepdims=True) + 1e-6)
         )
     return loss
 
-def false_acceptance_ratio():
+def false_acceptance_ratio(mat, N, M):
     """
     The ratio of falsely accepted impostor speakers over all scored impostors (type II errors).
     """
     pass
 
-def false_rejection_ratio():
+def false_rejection_ratio(mat, N, M):
     """
     The ratio of falsely rejected geniune speakers over all genuine speakers (type I errors).
     """

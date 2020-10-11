@@ -14,7 +14,6 @@ class GE2EDatasetLoader:
         self.test_dir = f'{root_dir}/test'
         with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
-            # TODO: now we need to put the batchs in the transformer
             self.batch_size = self.metadata['batch_size']
             self.example_dim = len(self.metadata['feature_shape'])
         self.serializer = SpectrogramSerializer()
@@ -25,6 +24,7 @@ class GE2EDatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
         raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
+        # TODO: add the shuffling here now
         d = raw_dataset.map(self.serializer.deserialize)
         return d
 

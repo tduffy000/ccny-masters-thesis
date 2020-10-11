@@ -59,7 +59,7 @@ class GE2EBatchLoader:
         )
         self.tf_serializer = SpectrogramSerializer()
         self.sr = sr
-        self.num_files_created = 0
+        self.num_files_created = {'train': 0, 'test': 0}
         
         self.shape = None
 
@@ -112,15 +112,15 @@ class GE2EBatchLoader:
                 speaker_files[speaker_id] = d + paths
         return speaker_files
 
-    def _update_shape(self):
+    def _update_shape(self, speaker_files):
         if self.shape is None:
-            sample_speaker = list(self.speaker_files.keys())[0]
-            f = self.speaker_files[sample_speaker][0]
+            sample_speaker = list(speaker_files.keys())[0]
+            f = speaker_files[sample_speaker][0]
             y, _ = librosa.load(f, sr=self.sr)
             feature = next(self.extractor.as_features(y))
             self.shape = feature.shape
 
-    def _build_batch(self, n_speakers, utterances_per_speaker):
+    def _build_batch(self, speaker_files, n_speakers, utterances_per_speaker):
         """
         Build the batches of N speakers each having M utterances and write them each 
         to a TFRecord file.
@@ -131,20 +131,19 @@ class GE2EBatchLoader:
         batch = np.zeros((N*M, self.shape[0], self.shape[1]))
         labels = []
 
-        # speaker_set has to be a SET not a list; we need N UNIQUE speakers
-        speaker_set = random.sample(list(self.speaker_files.keys()), k=N)
+        speaker_set = random.sample(list(speaker_files.keys()), k=N)
         # TODO: add files & datasets to serialization
         for i, speaker in enumerate(speaker_set):
             j = i*M
             
             while j < (i+1)*M:
-                f = self.speaker_files[speaker].pop()
+                f = speaker_files[speaker].pop()
                 y, _ = librosa.load(f, sr=self.sr)
                 features = list(self.extractor.as_features(y))
 
                 # if we don't get M features back
                 while len(features) < M:
-                    f = self.speaker_files[speaker].pop()
+                    f = speaker_files[speaker].pop()
                     y, _ = librosa.load(f, sr=self.sr)
                     features += list(self.extractor.as_features(y))
 
@@ -162,40 +161,42 @@ class GE2EBatchLoader:
         subdir_path = f'{self.target_dir}/{subdir}'
         if not os.path.exists(subdir_path):
             os.makedirs(subdir_path)
-        path = f'{self.target_dir}/{subdir}/{subdir}_batch_{self.num_files_created+1:05d}.tfrecords'
+        path = f'{self.target_dir}/{subdir}/{subdir}_batch_{self.num_files_created.get(subdir)+1:05d}.tfrecords'
         logger.info(f'Flushing batch into: {path}')
         with tf.io.TFRecordWriter(path) as writer:
             # TODO: we can collate batches now that we don't rely on tf.Dataset to do it
             writer.write(batch.SerializeToString())
-        self.num_files_created += 1
+        self.num_files_created[subdir] = self.num_files_created.get(subdir, 0) + 1
 
-    def load(self):
-
-        self.speaker_files = {}
-        # TODO: extend to test dataset
-        for dataset, subsets in self.train_datasets.items():
+    def _load_dataset(self, datasets, is_train):
+        speaker_files = {}
+        for dataset, subsets in datasets.items():
             dataset_path = f'{self.root_dir}/{dataset}'
             for subset in subsets:
                 subset_path = f'{dataset_path}/{subset}'
                 # how to concatenate multiple datasets here?
-                self.speaker_files = self._get_audio_files(self.speaker_files, subset_path)
-
+                speaker_files = self._get_audio_files(speaker_files, subset_path)
         batches_remain = True
         while batches_remain:
-            self._update_shape()
-            batch = self._build_batch(self.speakers_per_batch, self.utterances_per_speaker)
-            self._write_batch(batch)
+            self._update_shape(speaker_files)
+            batch = self._build_batch(speaker_files, self.speakers_per_batch, self.utterances_per_speaker)
+            self._write_batch(batch, is_train)
 
             # remove speaker keys with files remaining < file threshold
             keys_to_remove = []
-            for k, v in self.speaker_files.items():
+            for k, v in speaker_files.items():
                 if len(v) < FILE_THRESHOLD:
                     keys_to_remove.append(k)
             for k in keys_to_remove:
-                self.speaker_files.pop(k, None)
+                speaker_files.pop(k, None)
 
             # check if we have at leats N speakers left to build a batch
-            batches_remain = len(self.speaker_files) >= self.speakers_per_batch
+            batches_remain = len(speaker_files) >= self.speakers_per_batch
+
+    def load(self):
+
+        self._load_dataset(self.train_datasets, is_train=True)
+        self._load_dataset(self.test_datasets, is_train=False)
 
         metadata = {
             'feature_shape': self.shape,

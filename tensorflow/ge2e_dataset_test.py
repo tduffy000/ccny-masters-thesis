@@ -37,3 +37,10 @@ def test_train_dataset_batch_has_n_speakers():
 def test_train_dataset_returns_m_utterances():
     counts = get_batch_utterance_counts(True)
     assert all([ c == M for c in counts ])
+
+def test_test_dataset_batch_has_n_speakers():
+    assert(get_batch_speaker_cardinality(False)) == N
+
+def test_test_dataset_returns_m_utterances():
+    counts = get_batch_utterance_counts(False)
+    assert all([ c == M for c in counts ])
