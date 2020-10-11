@@ -23,7 +23,7 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 50
+  epochs: 20
   network:
     optimizer:
       type: Adam

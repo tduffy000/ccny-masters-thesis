@@ -49,5 +49,5 @@ class GE2EDatasetLoader:
         return train_dataset
 
     def get_test_dataset(self):
-        test_dataset = self._prep_dataset(self.train_dir)
+        test_dataset = self._prep_dataset(self.test_dir)
         return test_dataset

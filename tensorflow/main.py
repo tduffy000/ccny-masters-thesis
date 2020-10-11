@@ -63,9 +63,15 @@ def train(conf):
     logger.info('Finished training, now evaluating...')
     return model
 
-def evaluate(conf):
-# https://www.tensorflow.org/api_docs/python/tf/keras/Model#make_test_function
-    pass
+def evaluate(conf, model):
+    # https://www.tensorflow.org/api_docs/python/tf/keras/Model#make_test_function
+    fe_data_conf = conf['feature_data']
+    N = fe_data_conf['N']
+    M = fe_data_conf['M']
+
+    dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
+    test_dataset = dataset_loader.get_test_dataset()
+    model.evaluate(test_dataset)
 
 def freeze(conf):
     pass
@@ -88,7 +94,7 @@ def main(args):
             tf.keras.backend.clear_session()
 
         model = train(conf)
-        evaluate(model)
+        evaluate(conf, model)
 
         if args.freeze_model:
             epoch_time = int(time.time())
