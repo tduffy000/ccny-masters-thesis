@@ -32,36 +32,31 @@ class FeatureSerializer:
 
 class SpectrogramSerializer(FeatureSerializer):
 
-    def __init__(self, example_dim=3):
-        super().__init__(example_dim)
+    def __init__(self):
+        super().__init__()
 
-    def serialize(self, spectrogram, speaker_id, file):
-        if speaker_id not in self.speaker_id_mapping:
-            self.speaker_id_mapping[speaker_id] = len(self.speaker_id_mapping)
+    def serialize(self, batch, speaker_ids):
+        for speaker_id in speaker_ids:
+            if speaker_id not in self.speaker_id_mapping:
+                self.speaker_id_mapping[speaker_id] = len(self.speaker_id_mapping)
         return tf.train.Example(features=tf.train.Features(feature={
-            'spectrogram/height': self._int64_feature(spectrogram.shape[0]),
-            'spectrogram/width': self._int64_feature(spectrogram.shape[1]),
-            'spectrogram/encoded': self._float_feature(spectrogram), # TODO: should this be a _float_feature or _bytes_feature???
-            'speaker/orig_speaker_id': self._int64_feature(speaker_id),
-            'speaker/speaker_id_index': self._int64_feature(self.speaker_id_mapping[speaker_id]),
-            'data/file': self._bytes_feature(bytes(file, 'utf-8'))
+            'feature/batch_size': self._int64_feature(batch.shape[0]),
+            'feature/height': self._int64_feature(batch.shape[1]),
+            'feature/width': self._int64_feature(batch.shape[2]),
+            'spectrograms/encoded': self._float_feature(batch), # TODO: should this be a _float_feature or _bytes_feature???
+            'speaker/orig_speaker_ids': self._int64_feature(speaker_ids)
         }))
 
     def deserialize(self, proto):
         feature_map = {
-            'spectrogram/height': tf.io.FixedLenFeature([], tf.int64),
-            'spectrogram/width': tf.io.FixedLenFeature([], tf.int64),
-            'spectrogram/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
-            'speaker/orig_speaker_id': tf.io.FixedLenFeature([], tf.int64),
-            'speaker/speaker_id_index': tf.io.FixedLenFeature([], tf.int64),
-            'data/file': tf.io.FixedLenFeature([], tf.string),
-            'data/dataset': tf.io.FixedLenFeature([], tf.string)
+            'feature/batch_size': tf.io.FixedLenFeature([], tf.int64),
+            'feature/height': tf.io.FixedLenFeature([], tf.int64),
+            'feature/width': tf.io.FixedLenFeature([], tf.int64),
+            'spectrograms/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+            'speaker/orig_speaker_ids': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True)
         }
         example = tf.io.parse_example(proto, feature_map)
-        height, width = example['spectrogram/height'], example['spectrogram/width']
-        if self.example_dim == 2:
-            inputs = tf.reshape(example['spectrogram/encoded'], [height, width])
-        else: # 3
-            inputs = tf.reshape(example['spectrogram/encoded'], [height, width, 1])
-        targets = example['speaker/speaker_id_index']
+        batch_size, height, width = example['feature/batch_size'], example['feature/height'], example['feature/width']
+        inputs = tf.reshape(example['spectrograms/encoded'], [batch_size, height, width])
+        targets = example['speaker/orig_speaker_ids']
         return inputs, targets

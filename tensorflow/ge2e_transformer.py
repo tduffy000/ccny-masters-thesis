@@ -112,8 +112,12 @@ class GE2EBatchLoader:
                 speaker_files[speaker_id] = d + paths
         return speaker_files
 
-    def _update_shape(self, feature):
+    def _update_shape(self):
         if self.shape is None:
+            sample_speaker = list(self.speaker_files.keys())[0]
+            f = self.speaker_files[sample_speaker][0]
+            y, _ = librosa.load(f, sr=self.sr)
+            feature = next(self.extractor.as_features(y))
             self.shape = feature.shape
 
     def _build_batch(self, n_speakers, utterances_per_speaker):
@@ -121,24 +125,37 @@ class GE2EBatchLoader:
         Build the batches of N speakers each having M utterances and write them each 
         to a TFRecord file.
         """
-        # random choose N speakers
-        speaker_set = random.choices(list(self.speaker_files.keys()), k=n_speakers)
-        batch = []
-        for i, speaker in enumerate(speaker_set, start=1):
-            # pop files and write from their files until we fill utterance_per_speaker (M)
-            files = self.speaker_files[speaker]
-            while len(batch) < i * utterances_per_speaker:
-                # what if the below throws an IndexError?
-                f = files.pop()
+        # each batch is [N*M, spectrogram_height, spectrogram_width]
+        N = n_speakers
+        M = utterances_per_speaker
+        batch = np.zeros((N*M, self.shape[0], self.shape[1]))
+        labels = []
+
+        # speaker_set has to be a SET not a list; we need N UNIQUE speakers
+        speaker_set = random.sample(list(self.speaker_files.keys()), k=N)
+        # TODO: add files & datasets to serialization
+        for i, speaker in enumerate(speaker_set):
+            j = i*M
+            
+            while j < (i+1)*M:
+                f = self.speaker_files[speaker].pop()
                 y, _ = librosa.load(f, sr=self.sr)
-                for feature in self.extractor.as_features(y):
-                    self._update_shape(feature)
+                features = list(self.extractor.as_features(y))
+
+                # if we don't get M features back
+                while len(features) < M:
+                    f = self.speaker_files[speaker].pop()
+                    y, _ = librosa.load(f, sr=self.sr)
+                    features += list(self.extractor.as_features(y))
+
+                for feature in random.sample(features, k=M):
                     self._validate_numeric(feature)
-                    protobuf = self.tf_serializer.serialize(feature, int(speaker), f)
-                    # make sure we only get M utterances
-                    if len(batch) < i * utterances_per_speaker:
-                        batch.append(protobuf)
-        return batch
+                    batch[j,:,:] = feature
+                    labels.append(speaker)
+                    j += 1
+
+        protobuf = self.tf_serializer.serialize(batch, labels)
+        return protobuf
 
     def _write_batch(self, batch, is_train=True):
         subdir = 'train' if is_train else 'test'
@@ -148,8 +165,8 @@ class GE2EBatchLoader:
         path = f'{self.target_dir}/{subdir}/{subdir}_batch_{self.num_files_created+1:05d}.tfrecords'
         logger.info(f'Flushing batch into: {path}')
         with tf.io.TFRecordWriter(path) as writer:
-            for example in batch:
-                writer.write(example.SerializeToString())
+            # TODO: we can collate batches now that we don't rely on tf.Dataset to do it
+            writer.write(batch.SerializeToString())
         self.num_files_created += 1
 
     def load(self):
@@ -165,6 +182,7 @@ class GE2EBatchLoader:
 
         batches_remain = True
         while batches_remain:
+            self._update_shape()
             batch = self._build_batch(self.speakers_per_batch, self.utterances_per_speaker)
             self._write_batch(batch)
 
@@ -179,7 +197,6 @@ class GE2EBatchLoader:
             # check if we have at leats N speakers left to build a batch
             batches_remain = len(self.speaker_files) >= self.speakers_per_batch
 
-        # generalize to merged datasets
         metadata = {
             'feature_shape': self.shape,
             'files_created': self.num_files_created,

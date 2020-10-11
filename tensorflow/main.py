@@ -40,7 +40,7 @@ def train(conf):
     M = fe_data_conf['M']
 
     dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
-    train_dataset = dataset_loader.get_dataset()
+    train_dataset = dataset_loader.get_train_dataset()
     dataset_metadata = dataset_loader.get_metadata()
     model = SpeakerVerificationModel(model_conf, dataset_metadata, N, M)
     optim = get_optimizer(
@@ -88,8 +88,7 @@ def main(args):
             tf.keras.backend.clear_session()
 
         model = train(conf)
-
-        # TODO: evaluate model
+        evaluate(model)
 
         if args.freeze_model:
             epoch_time = int(time.time())

@@ -14,9 +14,10 @@ class GE2EDatasetLoader:
         self.test_dir = f'{root_dir}/test'
         with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
+            # TODO: now we need to put the batchs in the transformer
             self.batch_size = self.metadata['batch_size']
             self.example_dim = len(self.metadata['feature_shape'])
-        self.serializer = SpectrogramSerializer(example_dim=self.example_dim)
+        self.serializer = SpectrogramSerializer()
         logger.info(f'Creating dataset with following metadata: {self.metadata}')
 
     def _prep_dataset(self, dir):
@@ -24,11 +25,8 @@ class GE2EDatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
         raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
-        # TODO: need to figure out how to shuffle the batches
-        batch_dataset = raw_dataset\
-                            .map(self.serializer.deserialize)\
-                            .batch(self.batch_size, drop_remainder=True)
-        return batch_dataset
+        d = raw_dataset.map(self.serializer.deserialize)
+        return d
 
     def get_metadata(self):
         return self.metadata
@@ -41,7 +39,15 @@ class GE2EDatasetLoader:
         test_dataset = self._prep_dataset(self.test_dir)
         return next(iter(test_dataset))
 
-    def get_dataset(self):
+    def get_datasets(self):
         train_dataset = self._prep_dataset(self.train_dir)
-        # test_dataset = self._prep_dataset(self.test_dir)
-        return train_dataset#, test_dataset
+        test_dataset = self._prep_dataset(self.test_dir)
+        return train_dataset, test_dataset
+
+    def get_train_dataset(self):
+        train_dataset = self._prep_dataset(self.train_dir)
+        return train_dataset
+
+    def get_test_dataset(self):
+        test_dataset = self._prep_dataset(self.train_dir)
+        return test_dataset
