@@ -6,8 +6,8 @@ raw_data:
       - dev-clean
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
-  speakers_per_batch: 20     # N
-  utterances_per_speaker: 20 # M
+  N: 20 # speakers per batch
+  M: 10 # utterances per batch per speaker
 features:
   type: melspectrogram
   window_length: 0.28125
@@ -18,13 +18,12 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 20
+  epochs: 100
   input_dimensions: 2 # 2 for Conv1D and 3 for Conv2D
   network:
-    loss: sparse_categorical_crossentropy
     optimizer:
       type: Adam
-      lr: 0.00001
+      lr: 0.001
     dropout: 0.1
     layers:
       - conv1d:

@@ -6,31 +6,31 @@ import tensorflow as tf
 
 class SimilarityMatrixLayer(tf.keras.layers.Layer):
 
-    def __init__(self, speakers_per_batch):
+    def __init__(self, N, M, P):
         super(SimilarityMatrixLayer, self).__init__()
         self.w = tf.Variable(
             initial_value=5.,
             trainable=True,
-            name='similarity_matrix/weights',
-            dtype=tf.float32
+            name='similarity_matrix/weights'
         )
         self.b = tf.Variable(
             initial_value=10.,
             trainable=True,
-            name='similarity_matrix/bias',
-            dtype=tf.float32
+            name='similarity_matrix/bias'
         )
-        self.speakers_per_batch = speakers_per_batch
+        self.N = N # num unique speakers
+        self.M = M # num utterances / speaker
+        self.P = P # embedding dimension length
 
     def call(self, inputs):
-
+        """
+        Args:
+            inputs: [batch_size x embedding_dim]
+        """
         # compute similarity matrix from the embedding layer
-        batch_size, P = inputs.shape
-        M = batch_size // self.speakers_per_batch
-        N = self.speakers_per_batch 
+        N, M, P = self.N, self.M, self.P
         embedded_split = tf.reshape(inputs, shape=[N, M, P])
-
-        center=None
+        center = None
 
         if center is None:
             center = tf.math.l2_normalize(tf.math.reduce_mean(embedded_split, axis=1))              # [N,P] normalized center vectors eq.(1)
@@ -52,8 +52,10 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
 
 class SpeakerVerificationModel(tf.keras.Model):
 
-    def __init__(self, conf, dataset_metadata):
+    def __init__(self, conf, dataset_metadata, N, M):
         super(SpeakerVerificationModel, self).__init__()
+        self.N = N
+        self.M = M 
         self.layer_list = [
             tf.keras.layers.Input(
                 shape=dataset_metadata['feature_shape'],
@@ -149,9 +151,10 @@ class SpeakerVerificationModel(tf.keras.Model):
             elif layer_type == 'fc':
                 self.layer_list += self.get_fc(layer['nodes'])
             elif layer_type == 'embedding':
+                self.P = layer['nodes']
                 self.layer_list += self.get_fc(layer['nodes'])
             elif layer_type == 'similarity_matrix':
-                self.layer_list += [SimilarityMatrixLayer(self.speakers_per_batch)]
+                self.layer_list += [SimilarityMatrixLayer(self.N, self.M, self.P)]
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):

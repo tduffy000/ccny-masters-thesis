@@ -32,7 +32,9 @@ def main(args):
 
     raw_data_conf = conf['raw_data']
     raw_data_path = raw_data_conf['path']
-    feature_data_path = conf['feature_data']['path']
+    fe_data_conf = conf['feature_data']
+    feature_data_path = fe_data_conf['path']
+
 
     if args.feature_engineering:
         fe_conf = conf['features']
@@ -49,20 +51,25 @@ def main(args):
             n_mels=fe_conf.get('n_mels', -1),
             sr=conf['sr'],
             trim_top_db=fe_conf['trim_top_db'],
-            speakers_per_batch=conf['feature_data']['speakers_per_batch'],
-            utterances_per_speaker=conf['feature_data']['utterances_per_speaker']
+            speakers_per_batch=fe_data_conf['speakers_per_batch'],
+            utterances_per_speaker=fe_data_conf['utterances_per_speaker']
         ).load()
 
     if args.train:
         if args.new_session:
             tf.keras.backend.clear_session()
         train_conf = conf['train']
+        # N = num speaker / batch
+        # M = utterances / speaker
+        N = fe_data_conf['N']
+        M = fe_data_conf['M']
+
         dataset_loader = GE2EDatasetLoader(feature_data_path)
         # train_dataset, test_dataset = dataset_loader.get_dataset()
         train_dataset = dataset_loader.get_dataset()
         model_conf = train_conf['network']
         dataset_metadata = dataset_loader.get_metadata()
-        model = SpeakerVerificationModel(model_conf, dataset_metadata)
+        model = SpeakerVerificationModel(model_conf, dataset_metadata, N, M)
         optim = get_optimizer(
             type=model_conf['optimizer']['type'],
             lr=model_conf['optimizer']['lr'],
@@ -71,10 +78,6 @@ def main(args):
             epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
         )
 
-        # TODO: add metrics
-        # N = num speaker / batch; M = utterances / speaker
-        N = conf['feature_data']['speakers_per_batch']
-        M = conf['feature_data']['utterances_per_speaker']
         model.compile(
             optimizer=optim,
             loss=get_embedding_loss(N, M)

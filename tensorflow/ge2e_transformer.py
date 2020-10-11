@@ -137,7 +137,6 @@ class GE2EBatchLoader:
                     # make sure we only get M utterances
                     if len(batch) < i * utterances_per_speaker:
                         batch.append(protobuf)
-        random.shuffle(batch)
         return batch
 
     def _write_batch(self, batch, is_train=True):
