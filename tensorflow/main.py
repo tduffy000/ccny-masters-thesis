@@ -8,7 +8,6 @@ from ge2e_dataset import GE2EDatasetLoader
 from ge2e_transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
 from utils import get_callback, get_optimizer
-from loss import get_embedding_loss, equal_error_ratio
 
 def feature_engineering(conf):
     raw_data_conf = conf['raw_data']
@@ -36,26 +35,25 @@ def train(conf):
     train_conf = conf['train']
     model_conf = train_conf['network']
     fe_data_conf = conf['feature_data']
-    N = fe_data_conf['N']
-    M = fe_data_conf['M']
-
-    dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
+    dataset_loader = GE2EDatasetLoader(
+        fe_data_conf['path'],
+        fe_data_conf['batch_size']
+    )
     train_dataset = dataset_loader.get_train_dataset()
     dataset_metadata = dataset_loader.get_metadata()
-    model = SpeakerVerificationModel(model_conf, dataset_metadata, N, M)
+    
+    model = SpeakerVerificationModel(model_conf, dataset_metadata)
     optim = get_optimizer(
         type=model_conf['optimizer']['type'],
         lr=model_conf['optimizer']['lr'],
         momentum=model_conf['optimizer'].get('momentum', 0.0), # default for tf.keras.optimizers.{SGD, RMSprop}
         rho=model_conf['optimizer'].get('rho', 0.9), # default for tf.keras.optimizers.RMSprop
-        epsilon=model_conf['optimizer'].get('epsilon', 1e-7),
-        clipnorm=model_conf['optimizer'].get('clipnorm', None)
+        epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
     )
 
-    # TODO: still need gradient scaling for W & b in similarity matrix calculation
     model.compile(
         optimizer=optim,
-        loss=get_embedding_loss(N, M)
+        loss=tf.keras.losses.BinaryCrossentropy()
     )
     callbacks = []
     for callback, conf in model_conf['callbacks'].items():
@@ -67,15 +65,9 @@ def train(conf):
 
 def evaluate(conf, model):
     fe_data_conf = conf['feature_data']
-    N = fe_data_conf['N']
-    M = fe_data_conf['M']
-
     dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
     test_dataset = dataset_loader.get_test_dataset()
-    for inputs, _ in test_dataset:
-        m = model(inputs)
-        threshold, eer = equal_error_ratio(m, N, M)
-        print(f'threshold: {threshold}\tEER: {eer}')
+    model.evaluate(test_dataset)
 
 def freeze(model, tflite=True):
     epoch_time = int(time.time())
@@ -106,7 +98,6 @@ def main(args):
         if args.new_session:
             tf.keras.backend.clear_session()
 
-        # https://www.tensorflow.org/guide/keras/train_and_evaluate#custom_metrics
         model = train(conf)
         evaluate(conf, model)
 

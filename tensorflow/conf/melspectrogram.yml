@@ -8,6 +8,7 @@ raw_data:
       - test-clean
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
+  batch_size: 16
   train_split: 0.65
   tfrecord_examples_per_file: 5000
   target_speaker: LibriSpeech/dev-clean/3752
@@ -21,7 +22,7 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 1
+  epochs: 100
   network:
     optimizer:
       type: SGD
@@ -50,7 +51,7 @@ train:
           nodes: 512
       - embedding:
           nodes: 64
-      - output
+      - binary_softmax
     callbacks:
       # lr_scheduler:
       #   cutoff_epoch: 25

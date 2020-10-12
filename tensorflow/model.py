@@ -4,74 +4,13 @@ architecture.
 """
 import tensorflow as tf
 
-class SimilarityMatrixLayer(tf.keras.layers.Layer):
-
-    def __init__(self, N, M, P):
-        super(SimilarityMatrixLayer, self).__init__()
-        self.w = tf.Variable(
-            initial_value=tf.random_uniform_initializer(-1.0, 1.0),
-            shape=[1],
-            trainable=True,
-            name='similarity_matrix/weights'
-        )
-        self.b = tf.Variable(
-            initial_value=tf.random_uniform_initializer(-2.0, 2.0),
-            shape=[1],
-            trainable=True,
-            name='similarity_matrix/bias'
-        )
-        self.N = N # num unique speakers
-        self.M = M # num utterances / speaker
-        self.P = P # embedding dimension length
-
-    def call(self, inputs):
-        """
-        Args:
-            inputs: [NM x P]
-        Returns:
-            [NM x N]
-        """
-        # compute similarity matrix from the embedding layer
-        N, M, P = self.N, self.M, self.P
-        embedding_split = tf.reshape(inputs, shape=[N, M, P])
-        center = None
-
-        if center is None:
-            # Eq (1); [N x P]
-            # The centroid of tuple (e k1 , . . . , e kM ) represents the voiceprint built from M utterances
-            # it is the average embedding vector for a given speaker, k
-            centroids = tf.math.l2_normalize(tf.math.reduce_mean(embedding_split, axis=1), epsilon=1e-6)
-            # Eq (8); [NM x P]
-            centroids_except = tf.math.l2_normalize(
-                tf.reshape(tf.reduce_sum(embedding_split, axis=1, keepdims=True) - embedding_split, shape=[N*M, P])
-            )
-
-            # Eq (9); [NM x N]
-            S = tf.concat([
-                tf.concat([
-                    tf.reduce_sum(centroids[i:(i+1),:]*embedding_split[j,:,:], axis=1, keepdims=True) if i==j
-                    else tf.reduce_sum(centroids[i:(i+1),:]*embedding_split[j,:,:], axis=1, keepdims=True)
-                    for i in range(N)
-                ], axis=1) 
-            for j in range(N)], axis=0)
-        # TODO: incorporate enrollments
-        else :
-            # If center(enrollment) exist, use it.
-            S = tf.concat(
-                [tf.concat([tf.math.reduce_sum(center[i:(i + 1), :] * embedded_split[j, :, :], axis=1, keepdims=True) for i
-                            in range(N)],
-                        axis=1) for j in range(N)], axis=0)
-        # output shape [NM x N]; or num utterances by num speaker centroids
-        return tf.clip_by_value(tf.abs(self.w)*S+self.b, clip_value_min=0.0, clip_value_max=1.0)
-
 class SpeakerVerificationModel(tf.keras.Model):
 
     def __init__(self, conf, dataset_metadata):
         super(SpeakerVerificationModel, self).__init__()
         self.layer_list = [
             tf.keras.layers.Input(
-                shape=dataset_metadata['feature_shape'],
-                batch_size=dataset_metadata['batch_size']
+                shape=dataset_metadata['feature_shape']
             )
         ]
         self.model = self._parse_layer_conf(conf['layers'])
@@ -164,8 +103,8 @@ class SpeakerVerificationModel(tf.keras.Model):
             elif layer_type == 'embedding':
                 self.P = layer['nodes']
                 self.layer_list += self.get_fc(layer['nodes'])
-            elif layer_type == 'similarity_matrix':
-                self.layer_list += [SimilarityMatrixLayer(self.N, self.M, self.P)]
+            elif layer_type == 'binary_softmax':
+                self.layer_list += self.get_fc(2, activation='softmax')
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):

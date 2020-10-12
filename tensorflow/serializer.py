@@ -7,7 +7,6 @@ class FeatureSerializer:
     def __init__(self, example_dim=3):
         assert(example_dim in [2,3])
         self.example_dim = example_dim
-        self.speaker_id_mapping = {} # TODO: this will need to be dataset aware with inclusion of VoxCeleb
 
     @staticmethod
     def _int64_feature(value):
@@ -36,7 +35,7 @@ class FeatureSerializer:
 
 class SpectrogramSerializer(FeatureSerializer):
 
-    def __init__(self, target_speaker_id):
+    def __init__(self, target_speaker_id=None):
         super().__init__()
         self.target_speaker_id = target_speaker_id
         self.other_speaker_ids = set()
@@ -73,7 +72,7 @@ class SpectrogramSerializer(FeatureSerializer):
             'spectrogram/height': tf.io.FixedLenFeature([], tf.int64),
             'spectrogram/width': tf.io.FixedLenFeature([], tf.int64),
             'spectrogram/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
-            'speaker/id': tf.io.FixedLenFeature([], tf.int64, allow_missing=True),
+            'speaker/id': tf.io.FixedLenFeature([], tf.string),
             'speaker/is_target': tf.io.FixedLenFeature([], tf.int64),
         }
         example = tf.io.parse_example(proto, feature_map)
