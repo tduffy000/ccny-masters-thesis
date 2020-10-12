@@ -1,5 +1,9 @@
 from loss import *
 
+S_test = np.zeros((100, 100))
+N = 10
+M = 10
+
 def test_embedding_loss():
     pass
 

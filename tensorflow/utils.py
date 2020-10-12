@@ -17,12 +17,7 @@ def lr_scheduler(cutoff, lr):
 
 # we need to add a callback for metadata saving
 def get_callback(name, conf, lr=None):
-    if name == 'tensorboard':
-        return tf.keras.callbacks.TensorBoard(
-            log_dir=f'{conf["log_dir"]}/epoch={int(time.time())}',
-            write_images=conf['write_images']
-        )
-    elif name == 'lr_scheduler':
+    if name == 'lr_scheduler':
         scheduler = lr_scheduler(conf['cutoff_epoch'], lr)
         return tf.keras.callbacks.LearningRateScheduler(schedule=scheduler)
     elif name == 'csv_logger':
@@ -40,12 +35,21 @@ def get_callback(name, conf, lr=None):
 # # # # # # #
 # OPTIMIZER #
 # # # # # # #
-def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None):
+def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None, clipnorm=None):
     if type.lower() == 'adam':
-        return tf.keras.optimizers.Adam(lr=lr)
+        if clipnorm is None:
+            return tf.keras.optimizers.Adam(lr=lr)
+        else:
+            return tf.keras.optimizers.Adam(lr=lr, clipnorm=clipnorm)
     elif type.lower() == 'sgd':
-        return tf.keras.optimizers.SGD(lr=lr, momentum=momentum)
+        if clipnorm is None:
+            return tf.keras.optimizers.SGD(lr=lr, momentum=momentum)
+        else:
+            return tf.keras.optimizers.SGD(lr=lr, momentum=momentum, clipnorm=clipnorm)
     elif type.lower() == 'rmsprop':
-        return tf.keras.optimizers.RMSprop(lr=lr, rho=rho, momentum=momentum, epsilon=epsilon)
+        if clipnorm is None:
+            return tf.keras.optimizers.RMSprop(lr=lr, rho=rho, momentum=momentum, epsilon=epsilon)
+        else:
+            return tf.keras.optimizers.RMSprop(lr=lr, rho=rho, momentum=momentum, epsilon=epsilon, clipnorm=clipnorm)
     else:
         raise ParameterError()

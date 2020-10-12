@@ -23,11 +23,12 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 20
+  epochs: 1
   network:
     optimizer:
-      type: Adam
+      type: SGD
       lr: 0.001
+      clipnorm: 1.0
     dropout: 0.1
     layers:
       - conv1d:
@@ -53,9 +54,6 @@ train:
           nodes: 32
       - similarity_matrix # TODO: add initial values
     callbacks:
-      tensorboard:
-        log_dir: .tensorboard_logs
-        write_images: True
       # lr_scheduler:
       #   cutoff_epoch: 25
       #   decay: exponential

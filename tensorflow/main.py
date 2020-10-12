@@ -8,7 +8,7 @@ from ge2e_dataset import GE2EDatasetLoader
 from ge2e_transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
 from utils import get_callback, get_optimizer
-from loss import get_embedding_loss
+from loss import get_embedding_loss, equal_error_ratio
 
 def feature_engineering(conf):
     raw_data_conf = conf['raw_data']
@@ -48,9 +48,11 @@ def train(conf):
         lr=model_conf['optimizer']['lr'],
         momentum=model_conf['optimizer'].get('momentum', 0.0), # default for tf.keras.optimizers.{SGD, RMSprop}
         rho=model_conf['optimizer'].get('rho', 0.9), # default for tf.keras.optimizers.RMSprop
-        epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
+        epsilon=model_conf['optimizer'].get('epsilon', 1e-7),
+        clipnorm=model_conf['optimizer'].get('clipnorm', None)
     )
 
+    # TODO: still need gradient scaling for W & b in similarity matrix calculation
     model.compile(
         optimizer=optim,
         loss=get_embedding_loss(N, M)
@@ -64,20 +66,31 @@ def train(conf):
     return model
 
 def evaluate(conf, model):
-    # https://www.tensorflow.org/api_docs/python/tf/keras/Model#make_test_function
     fe_data_conf = conf['feature_data']
     N = fe_data_conf['N']
     M = fe_data_conf['M']
 
     dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
     test_dataset = dataset_loader.get_test_dataset()
-    model.evaluate(test_dataset)
+    for inputs, _ in test_dataset:
+        m = model(inputs)
+        threshold, eer = equal_error_ratio(m, N, M)
+        print(f'threshold: {threshold}\tEER: {eer}')
 
-def freeze(conf):
-    pass
-
-def convert_to_tflite():
-    pass
+def freeze(model, tflite=True):
+    epoch_time = int(time.time())
+    os.makedirs('frozen_models/full', exist_ok=True)
+    path = f'frozen_models/full/{epoch_time}'
+    logger.info(f'Freezing trained model to ./{path}')
+    model.save(path)
+    if tflite:
+        converter = tf.lite.TFLiteConverter.from_saved_model(path)
+        tflite_model = converter.convert()
+        os.makedirs(f'frozen_models/tiny/{epoch_time}', exist_ok=True)
+        lite_path = f'frozen_models/tiny/{epoch_time}/model.tflite'
+        logger.info(f'Converting trained model to TFLite in ./{lite_path}')
+        with open(lite_path, 'wb') as f:
+            f.write(tflite_model)
 
 def main(args):
     assert(args.config_file is not None), 'Must specify a --config_file'
@@ -93,27 +106,13 @@ def main(args):
         if args.new_session:
             tf.keras.backend.clear_session()
 
+        # https://www.tensorflow.org/guide/keras/train_and_evaluate#custom_metrics
         model = train(conf)
         evaluate(conf, model)
 
         if args.freeze_model:
-            epoch_time = int(time.time())
-            os.makedirs('frozen_models/full', exist_ok=True)
-            path = f'frozen_models/full/{epoch_time}'
-            logger.info(f'Freezing trained model to ./{path}')
-            model.save(path)
+            freeze(model, args.convert_to_lite)
             
-        if args.convert_to_lite:
-            # https://www.tensorflow.org/lite/convert/
-            assert(args.freeze_model), 'Must have frozen the model to convert it!'
-            converter = tf.lite.TFLiteConverter.from_saved_model(path)
-            tflite_model = converter.convert()
-            os.makedirs(f'frozen_models/tiny/{epoch_time}', exist_ok=True)
-            lite_path = f'frozen_models/tiny/{epoch_time}/model.tflite'
-            logger.info(f'Converting trained model to TFLite in ./{lite_path}')
-            with open(lite_path, 'wb') as f:
-                f.write(tflite_model)
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_file', type=str, default=None)

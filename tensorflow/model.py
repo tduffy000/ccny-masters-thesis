@@ -9,12 +9,14 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
     def __init__(self, N, M, P):
         super(SimilarityMatrixLayer, self).__init__()
         self.w = tf.Variable(
-            initial_value=10.,
+            initial_value=tf.random_uniform_initializer(-1.0, 1.0),
+            shape=[1],
             trainable=True,
             name='similarity_matrix/weights'
         )
         self.b = tf.Variable(
-            initial_value=-5.,
+            initial_value=tf.random_uniform_initializer(-2.0, 2.0),
+            shape=[1],
             trainable=True,
             name='similarity_matrix/bias'
         )
@@ -60,7 +62,7 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
                             in range(N)],
                         axis=1) for j in range(N)], axis=0)
         # output shape [NM x N]; or num utterances by num speaker centroids
-        return tf.abs(self.w)*S+self.b
+        return tf.clip_by_value(tf.abs(self.w)*S+self.b, clip_value_min=0.0, clip_value_max=1.0)
 
 class SpeakerVerificationModel(tf.keras.Model):
 
