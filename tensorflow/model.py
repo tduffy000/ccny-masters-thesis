@@ -25,30 +25,42 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
     def call(self, inputs):
         """
         Args:
-            inputs: [batch_size x embedding_dim]
+            inputs: [NM x P]
+        Returns:
+            [NM x N]
         """
         # compute similarity matrix from the embedding layer
         N, M, P = self.N, self.M, self.P
-        embedded_split = tf.reshape(inputs, shape=[N, M, P])
+        embedding_split = tf.reshape(inputs, shape=[N, M, P])
         center = None
 
         if center is None:
-            center = tf.math.l2_normalize(tf.math.reduce_mean(embedded_split, axis=1))              # [N,P] normalized center vectors eq.(1)
-            center_except = tf.math.l2_normalize(tf.reshape(tf.math.reduce_sum(embedded_split, axis=1, keepdims=True)
-                                                - embedded_split, shape=[N*M,P]))  # [NM,P] center vectors eq.(8)
-            # make similarity matrix eq.(9)
-            S = tf.concat(
-                [tf.concat([tf.math.reduce_sum(center_except[i*M:(i+1)*M,:]*embedded_split[j,:,:], axis=1, keepdims=True) if i==j
-                            else tf.math.reduce_sum(center[i:(i+1),:]*embedded_split[j,:,:], axis=1, keepdims=True) for i in range(N)],
-                        axis=1) for j in range(N)], axis=0)
+            # Eq (1); [N x P]
+            # The centroid of tuple (e k1 , . . . , e kM ) represents the voiceprint built from M utterances
+            # it is the average embedding vector for a given speaker, k
+            centroids = tf.math.l2_normalize(tf.math.reduce_mean(embedding_split, axis=1), epsilon=1e-6)
+            # Eq (8); [NM x P]
+            centroids_except = tf.math.l2_normalize(
+                tf.reshape(tf.reduce_sum(embedding_split, axis=1, keepdims=True) - embedding_split, shape=[N*M, P])
+            )
+
+            # Eq (9); [NM x N]
+            S = tf.concat([
+                tf.concat([
+                    tf.reduce_sum(centroids[i:(i+1),:]*embedding_split[j,:,:], axis=1, keepdims=True) if i==j
+                    else tf.reduce_sum(centroids[i:(i+1),:]*embedding_split[j,:,:], axis=1, keepdims=True)
+                    for i in range(N)
+                ], axis=1) 
+            for j in range(N)], axis=0)
+        # TODO: incorporate enrollments
         else :
             # If center(enrollment) exist, use it.
             S = tf.concat(
                 [tf.concat([tf.math.reduce_sum(center[i:(i + 1), :] * embedded_split[j, :, :], axis=1, keepdims=True) for i
                             in range(N)],
                         axis=1) for j in range(N)], axis=0)
-        S = tf.abs(self.w)*S+self.b
-        return S
+        # output shape [NM x N]; or num utterances by num speaker centroids
+        return tf.abs(self.w)*S+self.b
 
 class SpeakerVerificationModel(tf.keras.Model):
 
