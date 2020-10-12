@@ -17,7 +17,7 @@ from logger import logger
 AUDIO_FILETYPES = ['.flac', '.wav']
 FILE_THRESHOLD = 5
 
-class GE2EBatchLoader:
+class BatchLoader:
     """
     Loads the raw .flac files and is responsible for performing:
     |-- feature extraction (mel spectrograms)
@@ -34,7 +34,6 @@ class GE2EBatchLoader:
         overlap_percent, # in percent
         frame_length, # in seconds
         hop_length, # in seconds
-        target_speaker_id,
         n_fft=512,
         n_mels=40,
         sr=16000,
@@ -56,10 +55,10 @@ class GE2EBatchLoader:
             sr=sr,
             trim_top_db=trim_top_db
         )
-        self.tf_serializer = SpectrogramSerializer(target_speaker_id)
+        self.tf_serializer = SpectrogramSerializer()
         self.sr = sr
         self.num_files_created = {}
-        self.target_speaker_id = target_speaker_id
+        self.speaker_id_map = {}
 
         self.shape = None
         self.train_split = train_split
@@ -107,6 +106,11 @@ class GE2EBatchLoader:
                     if files and not dirs:
                         # TODO: provide helper for dealing with non-LibriSpeech id
                         speaker_id = f'{parent}/{subset}/{int(root.split("/")[-2])}'
+
+                        # update our speaker_id mapping
+                        if speaker_id not in self.speaker_id_map:
+                            self.speaker_id_map[speaker_id] = len(self.speaker_id_map)
+                        
                         d = speaker_files.get(speaker_id, [])
                         paths = [ f'{root}/{f}' for f in filter(self._is_audio_file, files) ]
                         speaker_files[speaker_id] = d + paths
@@ -140,8 +144,11 @@ class GE2EBatchLoader:
                     if self.shape is None:
                         self.shape = feature.shape
                     self._validate_numeric(feature)
-                    protobuf = self.tf_serializer.serialize(feature, speaker)
+
+                    mapped_id = self.speaker_id_map[speaker]
+                    protobuf = self.tf_serializer.serialize(feature, speaker, mapped_id)
                     self.feature_buffer.append(protobuf)
+                    
                     if len(self.feature_buffer) == self.buffer_flush_size:
                         path = f'{target_root}/{subdir}_shard_{num_files_created+1:05d}.tfrecords'
                         logger.info(f'Flushing feature buffer into: {path}')
@@ -151,27 +158,22 @@ class GE2EBatchLoader:
                                 writer.write(example.SerializeToString())
                             self.feature_buffer = deque()
                             num_files_created += 1
-        # reset the feature buffer so we don't leak into test set
+
         self.num_files_created[subdir] = num_files_created
         self.feature_buffer = deque()
 
     def load(self):
 
-        # partition dataset into test and train partitions
-        # MUST BE STRATIFIED BY SPEAKER ID proportions
         all_speaker_files = self._get_audio_files(self.root_dir, self.datasets)
         train_files, test_files = self._train_test_split_files(all_speaker_files, self.train_split)
 
-        # load & write out train dataset
         self._load_dataset('train', train_files)
-
-        # load & write out test dataset
         self._load_dataset('test', test_files)
 
         metadata = {
             'feature_shape': self.shape,
             'files_created': self.num_files_created,
-            'target_speaker_id': self.target_speaker_id,
+            'speaker_id_map': self.speaker_id_map,
             'datasets': self.datasets,
             'train_test_split': [self.train_split, 1 - self.train_split]
         }

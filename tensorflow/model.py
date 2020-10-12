@@ -13,6 +13,7 @@ class SpeakerVerificationModel(tf.keras.Model):
                 shape=dataset_metadata['feature_shape']
             )
         ]
+        self.n_speakers = len(dataset_metadata['speaker_id_map'])
         self.model = self._parse_layer_conf(conf['layers'])
 
     @staticmethod
@@ -103,8 +104,8 @@ class SpeakerVerificationModel(tf.keras.Model):
             elif layer_type == 'embedding':
                 self.P = layer['nodes']
                 self.layer_list += self.get_fc(layer['nodes'])
-            elif layer_type == 'binary_softmax':
-                self.layer_list += self.get_fc(2, activation='softmax')
+            elif layer_type == 'softmax':
+                self.layer_list += self.get_fc(self.n_speakers, activation='softmax')
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):

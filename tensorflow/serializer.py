@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 
-# TODO: add dataset field
 class FeatureSerializer:
 
     def __init__(self, example_dim=3):
@@ -35,28 +34,24 @@ class FeatureSerializer:
 
 class SpectrogramSerializer(FeatureSerializer):
 
-    def __init__(self, target_speaker_id=None):
+    def __init__(self):
         super().__init__()
-        self.target_speaker_id = target_speaker_id
-        self.other_speaker_ids = set()
 
-    def serialize(self, feature, speaker_id):
+    def serialize(self, feature, speaker_id, mapped_speaker_id):
         """
         Args:
             feature:
-            speaker_id: 
+            speaker_id:
+            mapped_speaker_id: 
         Returns:
 
         """
-        if speaker_id != self.target_speaker_id:
-            self.other_speaker_ids.add(speaker_id)
-        
         return tf.train.Example(features=tf.train.Features(feature={
             'spectrogram/height': self._int64_feature(feature.shape[0]),
             'spectrogram/width': self._int64_feature(feature.shape[1]),
             'spectrogram/encoded': self._float_feature(feature),
-            'speaker/id': self._bytes_feature(speaker_id),
-            'speaker/is_target': self._int64_feature(speaker_id == self.target_speaker_id),
+            'speaker/original_id': self._bytes_feature(speaker_id),
+            'speaker/mapped_id': self._int64_feature(mapped_speaker_id),
             'data/source': self._bytes_feature(speaker_id.split('/')[0]),
             'data/subset': self._bytes_feature(speaker_id.split('/')[1])
         }))
@@ -72,11 +67,11 @@ class SpectrogramSerializer(FeatureSerializer):
             'spectrogram/height': tf.io.FixedLenFeature([], tf.int64),
             'spectrogram/width': tf.io.FixedLenFeature([], tf.int64),
             'spectrogram/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
-            'speaker/id': tf.io.FixedLenFeature([], tf.string),
-            'speaker/is_target': tf.io.FixedLenFeature([], tf.int64),
+            'speaker/original_id': tf.io.FixedLenFeature([], tf.string),
+            'speaker/mapped_id': tf.io.FixedLenFeature([], tf.int64)
         }
         example = tf.io.parse_example(proto, feature_map)
         height, width = example['spectrogram/height'], example['spectrogram/width']
         inputs = tf.reshape(example['spectrogram/encoded'], [height, width])
-        targets = example['speaker/is_target']
+        targets = example['speaker/mapped_id']
         return inputs, targets

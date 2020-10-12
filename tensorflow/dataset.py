@@ -18,7 +18,6 @@ class GE2EDatasetLoader:
             self.metadata = json.load(stream)
             self.example_dim = len(self.metadata['feature_shape'])
         self.serializer = SpectrogramSerializer()
-        logger.info(f'Creating dataset with following metadata: {self.metadata}')
 
     def _prep_dataset(self, dir):
         tfrecord_file_names = list(filter(lambda f: f.endswith('.tfrecords'), os.listdir(dir)))

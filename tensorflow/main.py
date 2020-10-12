@@ -4,8 +4,8 @@ import os
 import time
 import tensorflow as tf
 from logger import logger
-from ge2e_dataset import GE2EDatasetLoader
-from ge2e_transformer import GE2EBatchLoader
+from dataset import DatasetLoader
+from transformer import BatchLoader
 from model import SpeakerVerificationModel
 from utils import get_callback, get_optimizer
 
@@ -14,13 +14,12 @@ def feature_engineering(conf):
     fe_conf = conf['features']
     fe_data_conf = conf['feature_data']
 
-    GE2EBatchLoader(
+    BatchLoader(
         root_dir=raw_data_conf['path'],
         datasets=raw_data_conf['datasets'],
         target_dir=fe_data_conf['path'],
         train_split=fe_data_conf['train_split'],
         tfrecord_examples_per_file=fe_data_conf['tfrecord_examples_per_file'],
-        target_speaker_id=fe_data_conf['target_speaker'],
         window_length=fe_conf['window_length'], # in seconds
         overlap_percent=fe_conf['overlap_percent'], # in percent
         frame_length=fe_conf['frame_length'], # in seconds
@@ -35,7 +34,7 @@ def train(conf):
     train_conf = conf['train']
     model_conf = train_conf['network']
     fe_data_conf = conf['feature_data']
-    dataset_loader = GE2EDatasetLoader(
+    dataset_loader = DatasetLoader(
         fe_data_conf['path'],
         fe_data_conf['batch_size']
     )
@@ -53,7 +52,10 @@ def train(conf):
 
     model.compile(
         optimizer=optim,
-        loss=tf.keras.losses.BinaryCrossentropy()
+        loss='sparse_categorical_crossentropy',
+        metrics=[
+            'accuracy'
+        ]
     )
     callbacks = []
     for callback, conf in model_conf['callbacks'].items():
@@ -65,7 +67,7 @@ def train(conf):
 
 def evaluate(conf, model):
     fe_data_conf = conf['feature_data']
-    dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
+    dataset_loader = DatasetLoader(fe_data_conf['path'])
     test_dataset = dataset_loader.get_test_dataset()
     model.evaluate(test_dataset)
 

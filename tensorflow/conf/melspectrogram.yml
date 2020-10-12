@@ -6,12 +6,12 @@ raw_data:
       - dev-clean
       - dev-other
       - test-clean
+      - test-other
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   batch_size: 16
   train_split: 0.65
   tfrecord_examples_per_file: 5000
-  target_speaker: LibriSpeech/dev-clean/3752
 features:
   type: melspectrogram
   window_length: 0.28125
@@ -22,12 +22,11 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 100
+  epochs: 20
   network:
     optimizer:
       type: SGD
       lr: 0.001
-      clipnorm: 1.0
     dropout: 0.1
     layers:
       - conv1d:
@@ -51,7 +50,7 @@ train:
           nodes: 512
       - embedding:
           nodes: 64
-      - binary_softmax
+      - softmax
     callbacks:
       # lr_scheduler:
       #   cutoff_epoch: 25
