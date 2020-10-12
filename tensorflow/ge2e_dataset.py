@@ -24,8 +24,7 @@ class GE2EDatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
         raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
-        # TODO: add the shuffling here now
-        d = raw_dataset.map(self.serializer.deserialize)
+        d = raw_dataset.shuffle(len(tfrecord_file_names)).map(self.serializer.deserialize)
         return d
 
     def get_metadata(self):
