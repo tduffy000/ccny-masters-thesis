@@ -2,17 +2,15 @@ sr: 16000
 raw_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
   datasets:
-    train:
-      LibriSpeech:
-        - dev-clean
-        - dev-other
-    test:
-      LibriSpeech:
-        - test-clean
+    LibriSpeech:
+      - dev-clean
+      - dev-other
+      - test-clean
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
-  N: 20 # speakers per batch
-  M: 10 # utterances per batch per speaker
+  train_split: 0.65
+  tfrecord_examples_per_file: 5000
+  target_speaker: LibriSpeech/dev-clean/3752
 features:
   type: melspectrogram
   window_length: 0.28125
@@ -51,8 +49,8 @@ train:
       - fc:
           nodes: 512
       - embedding:
-          nodes: 32
-      - similarity_matrix # TODO: add initial values
+          nodes: 64
+      - output
     callbacks:
       # lr_scheduler:
       #   cutoff_epoch: 25

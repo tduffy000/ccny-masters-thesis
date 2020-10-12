@@ -66,17 +66,14 @@ class SimilarityMatrixLayer(tf.keras.layers.Layer):
 
 class SpeakerVerificationModel(tf.keras.Model):
 
-    def __init__(self, conf, dataset_metadata, N, M):
+    def __init__(self, conf, dataset_metadata):
         super(SpeakerVerificationModel, self).__init__()
-        self.N = N
-        self.M = M 
         self.layer_list = [
             tf.keras.layers.Input(
                 shape=dataset_metadata['feature_shape'],
                 batch_size=dataset_metadata['batch_size']
             )
         ]
-        self.speakers_per_batch = dataset_metadata['speakers_per_batch']
         self.model = self._parse_layer_conf(conf['layers'])
 
     @staticmethod

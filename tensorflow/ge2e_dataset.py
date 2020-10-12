@@ -8,13 +8,14 @@ class GE2EDatasetLoader:
 
     def __init__(
         self,
-        root_dir
+        root_dir,
+        batch_size
     ):
         self.train_dir = f'{root_dir}/train'
         self.test_dir = f'{root_dir}/test'
+        self.batch_size = batch_size
         with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
-            self.batch_size = self.metadata['batch_size']
             self.example_dim = len(self.metadata['feature_shape'])
         self.serializer = SpectrogramSerializer()
         logger.info(f'Creating dataset with following metadata: {self.metadata}')
@@ -24,7 +25,7 @@ class GE2EDatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         logger.info(f'Dataset has {len(tfrecord_file_names)} files')
         raw_dataset = tf.data.TFRecordDataset(tfrecord_file_paths)
-        d = raw_dataset.shuffle(len(tfrecord_file_names)).map(self.serializer.deserialize)
+        d = raw_dataset.shuffle(len(tfrecord_file_names)).map(self.serializer.deserialize).batch(self.batch_size)
         return d
 
     def get_metadata(self):

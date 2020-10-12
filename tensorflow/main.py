@@ -17,9 +17,11 @@ def feature_engineering(conf):
 
     GE2EBatchLoader(
         root_dir=raw_data_conf['path'],
-        train_datasets=raw_data_conf['datasets']['train'],
-        test_datasets=raw_data_conf['datasets']['test'],
+        datasets=raw_data_conf['datasets'],
         target_dir=fe_data_conf['path'],
+        train_split=fe_data_conf['train_split'],
+        tfrecord_examples_per_file=fe_data_conf['tfrecord_examples_per_file'],
+        target_speaker_id=fe_data_conf['target_speaker'],
         window_length=fe_conf['window_length'], # in seconds
         overlap_percent=fe_conf['overlap_percent'], # in percent
         frame_length=fe_conf['frame_length'], # in seconds
@@ -27,9 +29,7 @@ def feature_engineering(conf):
         n_fft=fe_conf.get('n_fft', -1),
         n_mels=fe_conf.get('n_mels', -1),
         sr=conf['sr'],
-        trim_top_db=fe_conf['trim_top_db'],
-        speakers_per_batch=fe_data_conf['N'],
-        utterances_per_speaker=fe_data_conf['M']
+        trim_top_db=fe_conf['trim_top_db']
     ).load()
 
 def train(conf):
