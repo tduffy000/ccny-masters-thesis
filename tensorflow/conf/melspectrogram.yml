@@ -4,14 +4,16 @@ raw_data:
   datasets:
     LibriSpeech:
       - dev-clean
-      - dev-other
-      - test-clean
-      - test-other
+      # - dev-other
+      # - test-clean
+      # - test-other
+      # - train-clean-100
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
-  batch_size: 16
   train_split: 0.65
   tfrecord_examples_per_file: 5000
+  speakers_per_batch: 8
+  utterances_per_speaker: 4
 features:
   type: melspectrogram
   window_length: 0.28125
@@ -22,35 +24,25 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 20
+  epochs: 10
   network:
     optimizer:
-      type: SGD
+      type: Adam
       lr: 0.001
     dropout: 0.1
     layers:
-      - conv1d:
-          filters: 64
-          kernel_size: 16
-          use_batchnorm: True
-      - conv1d:
-          filters: 64
-          kernel_size: 5
-          use_batchnorm: True
-      - conv1d:
-          filters: 32
-          kernel_size: 2
-          use_batchnorm: True
-      # - lstm:
-      #     units: 8
-      - flatten
+      - lstm:
+          units: 128
+          return_sequences: True
+      - lstm:
+          units: 128
+          return_sequences: False
       - fc:
-          nodes: 512
-      - fc:
-          nodes: 512
+          nodes: 768
       - embedding:
-          nodes: 64
-      - softmax
+          nodes: 128
+      - similarity_matrix:
+          embedding_length: 128
     callbacks:
       # lr_scheduler:
       #   cutoff_epoch: 25

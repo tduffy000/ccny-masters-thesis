@@ -4,8 +4,8 @@ import os
 import time
 import tensorflow as tf
 from logger import logger
-from dataset import DatasetLoader
-from transformer import BatchLoader
+from dataset import GE2EDatasetLoader
+from transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
 from utils import get_callback, get_optimizer
 
@@ -14,7 +14,7 @@ def feature_engineering(conf):
     fe_conf = conf['features']
     fe_data_conf = conf['feature_data']
 
-    BatchLoader(
+    GE2EBatchLoader(
         root_dir=raw_data_conf['path'],
         datasets=raw_data_conf['datasets'],
         target_dir=fe_data_conf['path'],
@@ -27,14 +27,16 @@ def feature_engineering(conf):
         n_fft=fe_conf.get('n_fft', -1),
         n_mels=fe_conf.get('n_mels', -1),
         sr=conf['sr'],
-        trim_top_db=fe_conf['trim_top_db']
+        trim_top_db=fe_conf['trim_top_db'],
+        speakers_per_batch=fe_data_conf['speakers_per_batch'],
+        utterances_per_speaker=fe_data_conf['utterances_per_speaker']
     ).load()
 
-def train(conf):
+def train(conf, freeze=False):
     train_conf = conf['train']
     model_conf = train_conf['network']
     fe_data_conf = conf['feature_data']
-    dataset_loader = DatasetLoader(
+    dataset_loader = GE2EDatasetLoader(
         fe_data_conf['path'],
         fe_data_conf['batch_size']
     )
@@ -59,15 +61,16 @@ def train(conf):
     )
     callbacks = []
     for callback, conf in model_conf['callbacks'].items():
-        # TODO: clean up lr flag here
-        callbacks.append(get_callback(callback, conf, lr=model_conf['optimizer']['lr']))
+        cb = get_callback(callback, conf, lr=model_conf['optimizer']['lr'], freeze=freeze)
+        if cb is not None:
+            callbacks.append(cb)
     model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
     logger.info('Finished training, now evaluating...')
     return model
 
 def evaluate(conf, model):
     fe_data_conf = conf['feature_data']
-    dataset_loader = DatasetLoader(fe_data_conf['path'])
+    dataset_loader = DatasetLoader(fe_data_conf['path'], fe_data_conf['batch_size'])
     test_dataset = dataset_loader.get_test_dataset()
     model.evaluate(test_dataset)
 
@@ -100,7 +103,7 @@ def main(args):
         if args.new_session:
             tf.keras.backend.clear_session()
 
-        model = train(conf)
+        model = train(conf, args.freeze_model)
         evaluate(conf, model)
 
         if args.freeze_model:

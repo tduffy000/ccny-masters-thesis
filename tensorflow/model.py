@@ -4,6 +4,42 @@ architecture.
 """
 import tensorflow as tf
 
+class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
+
+    def __init__(self, n_speakers, utterances_per_speaker, embedding_length):
+        super(SpeakerSimilarityMatrixLayer, self).__init__()
+        self.W = tf.Variable(trainable=True)
+        self.b = tf.Variable(trainable=True)
+        self.N = n_speakers
+        self.M = utterances_per_speaker
+        self.P = embedding_length
+
+    def call(self, inputs):
+        """
+        Args:
+            inputs: output from the final Dense(self.P) embedding layer, representing each
+                    speakers "voiceprint" for a given utterance.
+        Returns:
+            An [NM x N] cosine similarity matrix comparing the NM utterances in each column
+            to the N centroids (representing the averaged embedding for a given speaker).
+        """
+        # [n_speakers x utterances x embedding_length]
+        utterance_embeddings = tf.reshape(inputs, shape=[self.N, self.M, self.P])
+        # the averaged embeddings for each speaker: [n_speakers x embedding_length]
+        centroids = tf.math.l2_normalize(
+            tf.reduce_mean(utterance_embeddings, axis=1),
+            axis=1
+        )
+        # now we need every utterance_embedding's cosine similarity with those centroids
+        # returning: [n_speakers * utterances x n_speakers (or n_centroids)]
+        S = tf.concat(
+            [tf.matmul(utterance_embeddings[i], centroids, transpose_b=True) for i in range(N)],
+            axis=0
+        )
+        # TODO: add W & b
+        return S
+
+
 class SpeakerVerificationModel(tf.keras.Model):
 
     def __init__(self, conf, dataset_metadata):
@@ -13,7 +49,8 @@ class SpeakerVerificationModel(tf.keras.Model):
                 shape=dataset_metadata['feature_shape']
             )
         ]
-        self.n_speakers = len(dataset_metadata['speaker_id_map'])
+        self.n_speakers = dataset_metadata['speakers_per_batch']
+        self.utterances_per_speaker = dataset_metadata['utterances_per_speaker']
         self.model = self._parse_layer_conf(conf['layers'])
 
     @staticmethod
@@ -56,24 +93,46 @@ class SpeakerVerificationModel(tf.keras.Model):
         return layers
 
     @staticmethod
-    def get_lstm(units, activation='tanh'):
-        return [tf.keras.layers.LSTM(units=units, activation=activation)]
+    def get_lstm(units, return_sequences, activation='tanh'):
+        return [
+            tf.keras.layers.LSTM(units=units, return_sequences=return_sequences, activation=activation)
+        ]
 
     @staticmethod
-    def get_gru(units, activation='tanh'):
-        return [tf.keras.layer.GRU(units=units, activation=activation)]
+    def get_lstm_cells():
+        pass
 
     @staticmethod
-    def get_bidirectional(layer_type, **kwargs):
-        if layer_type == 'lstm':
-            inner_layer = tf.keras.layers.LSTM(kwargs['units'])
-        elif layer_type == 'gru':
-            inner_layer = tf.keras.layers.GRU(kwargs['units'])
+    def get_gru_cells():
+        pass
+
+    @staticmethod
+    def get_gru(units, return_sequences, activation='tanh'):
+        return [
+            tf.keras.layer.GRU(units=units, return_sequences=return_sequences, activation=activation)
+        ]
+
+    @staticmethod
+    def get_bidirectional(inner, units):
+        if inner == 'lstm':
+            inner_layer = tf.keras.layers.LSTM(units)
+        elif inner == 'gru':
+            inner_layer = tf.keras.layers.GRU(units)
         return [tf.keras.layers.Bidirectional(inner_layer)]
 
-    # @staticmethod
-    # def get_global_pooling():
-    #     if layer_type == ''
+    @staticmethod
+    def get_global_pooling(layer_type):
+        if layer_type == 'average':
+            return [tf.keras.layers.GlobalAveragePooling1D()]
+        elif layer_type == 'max':
+            return [tf.keras.layers.GlobalMaxPooling1D()]
+
+    @staticmethod
+    def get_local_pooling(layer_type):
+        if layer_type == 'average':
+            return [tf.keras.layers.AveragePooling1D()]
+        elif layer_type == 'max':
+            return [tf.keras.layers.MaxPooling1D()]
 
     @staticmethod
     def get_fc(nodes, activation='relu'):
@@ -94,9 +153,11 @@ class SpeakerVerificationModel(tf.keras.Model):
                     layer['kernel_size']
                 )
             elif layer_type == 'lstm':
-                self.layer_list += self.get_lstm(units=layer['units'])
+                self.layer_list += self.get_lstm(units=layer['units'], return_sequences=layer['return_sequences'])
             elif layer_type == 'gru':
-                self.layer_list += self.get_gru(units=layer['units'])
+                self.layer_list += self.get_gru(units=layer['units'], return_sequences=layer['return_sequences'])
+            elif layer_type == 'bidirectional':
+                self.layer_list += self.get_bidirectional(layer['inner'], layer['units'])
             elif layer_type == 'flatten':
                 self.layer_list += [tf.keras.layers.Flatten()]
             elif layer_type == 'fc':
@@ -106,6 +167,8 @@ class SpeakerVerificationModel(tf.keras.Model):
                 self.layer_list += self.get_fc(layer['nodes'])
             elif layer_type == 'softmax':
                 self.layer_list += self.get_fc(self.n_speakers, activation='softmax')
+            elif layer_type == 'similarity_matrix':
+                self.layer_list += [SpeakerSimilarityMatrixLayer(self.n_speakers, self.utterances_per_speaker)]
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):
