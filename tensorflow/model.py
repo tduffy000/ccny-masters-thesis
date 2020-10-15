@@ -8,8 +8,8 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
 
     def __init__(self, n_speakers, utterances_per_speaker, embedding_length):
         super(SpeakerSimilarityMatrixLayer, self).__init__()
-        self.W = tf.Variable(trainable=True)
-        self.b = tf.Variable(trainable=True)
+        self.W = tf.Variable(trainable=True, initial_value=1.)
+        self.b = tf.Variable(trainable=True, initial_value=-1.)
         self.N = n_speakers
         self.M = utterances_per_speaker
         self.P = embedding_length
@@ -33,11 +33,11 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
         # now we need every utterance_embedding's cosine similarity with those centroids
         # returning: [n_speakers * utterances x n_speakers (or n_centroids)]
         S = tf.concat(
-            [tf.matmul(utterance_embeddings[i], centroids, transpose_b=True) for i in range(N)],
+            [tf.matmul(utterance_embeddings[i], centroids, transpose_b=True) for i in range(self.N)],
             axis=0
         )
-        # TODO: add W & b
-        return S
+        # TODO: clip by value [0, 1]?
+        return tf.abs(self.W) * S + self.b
 
 
 class SpeakerVerificationModel(tf.keras.Model):
@@ -168,7 +168,7 @@ class SpeakerVerificationModel(tf.keras.Model):
             elif layer_type == 'softmax':
                 self.layer_list += self.get_fc(self.n_speakers, activation='softmax')
             elif layer_type == 'similarity_matrix':
-                self.layer_list += [SpeakerSimilarityMatrixLayer(self.n_speakers, self.utterances_per_speaker)]
+                self.layer_list += [SpeakerSimilarityMatrixLayer(self.n_speakers, self.utterances_per_speaker, layer['embedding_length'])]
         return tf.keras.Sequential(self.layer_list)
 
     def call(self, inputs):
