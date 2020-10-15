@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
+# TODO: extend to GE2E with pre-built batches
+
 class FeatureSerializer:
 
     def __init__(self, example_dim=3):
@@ -21,6 +23,9 @@ class FeatureSerializer:
             value = bytes(value, 'utf-8')
         if not isinstance(value, list):
             value = [value]
+        if isinstance(value, list):
+            if len(value) > 0 and isinstance(value[0], str):
+                value = [bytes(v, 'utf-8') for v in value]
         return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
 
     @staticmethod
@@ -74,4 +79,46 @@ class SpectrogramSerializer(FeatureSerializer):
         height, width = example['spectrogram/height'], example['spectrogram/width']
         inputs = tf.reshape(example['spectrogram/encoded'], [height, width])
         targets = example['speaker/mapped_id']
+        return inputs, targets
+
+class GE2ESpectrogramSerializer(FeatureSerializer):
+
+    def __init__(self):
+        super().__init__()
+
+    def serialize(self, features, speaker_ids):
+        """
+        Args:
+            feature:
+            speaker_id:
+            mapped_speaker_id: 
+        Returns:
+
+        """
+        return tf.train.Example(features=tf.train.Features(feature={
+            'metadata/batch_size': self._int64_feature(features.shape[0]),
+            'spectrograms/height': self._int64_feature(features.shape[1]),
+            'spectrograms/width': self._int64_feature(features.shape[2]),
+            'spectrograms/encoded': self._float_feature(features),
+            'speakers/id': self._bytes_feature(speaker_ids)
+        }))
+
+    def deserialize(self, proto):
+        """
+        Args:
+            proto
+        Returns:
+
+        """
+        feature_map = {
+            'metadata/batch_size': tf.io.FixedLenFeature([], tf.int64),
+            'spectrograms/height': tf.io.FixedLenFeature([], tf.int64),
+            'spectrograms/width': tf.io.FixedLenFeature([], tf.int64),
+            'spectrograms/encoded': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+            'speakers/id': tf.io.FixedLenSequenceFeature([], tf.string, allow_missing=True)
+        }
+        example = tf.io.parse_example(proto, feature_map)
+        batch_size, height, width = example['metadata/batch_size'], example['spectrograms/height'], example['spectrograms/width']
+        inputs = tf.reshape(example['spectrograms/encoded'], [batch_size, height, width])
+        targets = example['speakers/id']
         return inputs, targets
