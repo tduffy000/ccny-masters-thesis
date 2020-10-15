@@ -2,8 +2,6 @@ import os
 import time
 import tensorflow as tf
 
-# TODO: this can move into the Config object (or perhaps we require a parser?)
-
 # # # # # # #
 # CALLBACKS #
 # # # # # # #
@@ -16,21 +14,20 @@ def lr_scheduler(cutoff, lr):
     return scheduler
 
 # we need to add a callback for metadata saving
-def get_callback(name, conf, lr=None):
+def get_callback(name, conf, lr=None, freeze=False):
     if name == 'lr_scheduler':
         scheduler = lr_scheduler(conf['cutoff_epoch'], lr)
         return tf.keras.callbacks.LearningRateScheduler(schedule=scheduler)
-    elif name == 'csv_logger':
+    elif name == 'csv_logger' and freeze:
         path = f'{conf["dir"]}/{int(time.time())}'
         os.makedirs(path)
         return tf.keras.callbacks.CSVLogger(f'{path}/logs.csv')
-    elif name == 'checkpoint':
+    elif name == 'checkpoint' and freeze:
         fpath = f'{conf["dir"]}/{int(time.time())}-weights.hdf5'
         if not os.path.exists(conf['dir']):
             os.makedirs(conf['dir'])
         return tf.keras.callbacks.ModelCheckpoint(fpath)
-    else:
-        raise ParameterError(f'{name} is not a supported callback.')
+    return None
 
 # # # # # # #
 # OPTIMIZER #
