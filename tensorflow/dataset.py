@@ -20,6 +20,7 @@ class DatasetLoader:
         with open(f'{root_dir}/metadata.json', 'r') as stream:
             self.metadata = json.load(stream)
             self.example_dim = len(self.metadata['feature_shape'])
+        self.records_per_file = self.metadata['batch_size'] # TODO: address this when writing more than one batch to a file
         self.serializer = SpectrogramSerializer()
 
     # https://github.com/tensorflow/tensorflow/issues/14857
@@ -28,13 +29,7 @@ class DatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         dataset = tf.data.Dataset.from_tensor_slices(tfrecord_file_paths)
         num_shards = len(tfrecord_file_paths)
-        dataset = dataset\
-            .shuffle(num_shards)\
-            .interleave(lambda f: tf.data.TFRecordDataset(f),
-                        deterministic=False,
-                        cycle_length=num_shards)\
-            .shuffle(SHUFFLE_SIZE)\
-            .map(self.serializer.deserialize)
+        dataset = dataset.shuffle(num_shards).interleave(lambda f: tf.data.TFRecordDataset(f), deterministic=False,cycle_length=num_shards).shuffle(self.records_per_file).map(self.serializer.deserialize)
         if self.batch_size is not None: # can be already provided
             dataset = dataset.batch(self.batch_size)
         return dataset

@@ -24,11 +24,12 @@ features:
   n_mels: 40
   trim_top_db: 20
 train:
-  epochs: 10
+  epochs: 50
   network:
     optimizer:
       type: Adam
       lr: 0.001
+      clipnorm: 2.0
     dropout: 0.1
     layers:
       - lstm:
@@ -40,9 +41,9 @@ train:
       - fc:
           nodes: 768
       - embedding:
-          nodes: 128
+          nodes: 256
       - similarity_matrix:
-          embedding_length: 128
+          embedding_length: 256
     callbacks:
       # lr_scheduler:
       #   cutoff_epoch: 25

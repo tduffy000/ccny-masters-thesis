@@ -36,7 +36,6 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
             [tf.matmul(utterance_embeddings[i], centroids, transpose_b=True) for i in range(self.N)],
             axis=0
         )
-        # TODO: clip by value [0, 1]?
         return tf.abs(self.W) * S + self.b
 
 

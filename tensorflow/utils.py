@@ -32,12 +32,18 @@ def get_callback(name, conf, lr=None, freeze=False):
 # # # # # # #
 # OPTIMIZER #
 # # # # # # #
-def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None):
+def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None, clipnorm=None):
     if type.lower() == 'adam':
+        if clipnorm is not None:
+            return tf.keras.optimizers.Adam(lr=lr, clipnorm=clipnorm)    
         return tf.keras.optimizers.Adam(lr=lr)
     elif type.lower() == 'sgd':
+        if clipnorm is not None:
+            return tf.keras.optimizers.SGD(lr=lr, momentum=momentum, clipnorm=clipnorm)    
         return tf.keras.optimizers.SGD(lr=lr, momentum=momentum)
     elif type.lower() == 'rmsprop':
+        if clipnorm is not None:
+            return tf.keras.optimizers.RMSprop(lr=lr, rho=rho, momentum=momentum, epsilon=epsilon, clipnorm=clipnorm)    
         return tf.keras.optimizers.RMSprop(lr=lr, rho=rho, momentum=momentum, epsilon=epsilon)
     else:
         raise ParameterError()

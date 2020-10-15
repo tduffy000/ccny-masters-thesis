@@ -5,8 +5,9 @@ import time
 import tensorflow as tf
 from logger import logger
 from dataset import GE2EDatasetLoader
-from transformer import GE2EBatchLoader
+# from transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
+from loss import get_embedding_loss
 from utils import get_callback, get_optimizer
 
 def feature_engineering(conf):
@@ -36,10 +37,7 @@ def train(conf, freeze=False):
     train_conf = conf['train']
     model_conf = train_conf['network']
     fe_data_conf = conf['feature_data']
-    dataset_loader = GE2EDatasetLoader(
-        fe_data_conf['path'],
-        fe_data_conf['batch_size']
-    )
+    dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
     train_dataset = dataset_loader.get_train_dataset()
     dataset_metadata = dataset_loader.get_metadata()
     
@@ -49,15 +47,13 @@ def train(conf, freeze=False):
         lr=model_conf['optimizer']['lr'],
         momentum=model_conf['optimizer'].get('momentum', 0.0), # default for tf.keras.optimizers.{SGD, RMSprop}
         rho=model_conf['optimizer'].get('rho', 0.9), # default for tf.keras.optimizers.RMSprop
-        epsilon=model_conf['optimizer'].get('epsilon', 1e-7)
+        epsilon=model_conf['optimizer'].get('epsilon', 1e-7),
+        clipnorm=model_conf['optimizer'].get('clipnorm', None)
     )
 
     model.compile(
         optimizer=optim,
-        loss='sparse_categorical_crossentropy',
-        metrics=[
-            'accuracy'
-        ]
+        loss=get_embedding_loss(fe_data_conf['speakers_per_batch'], fe_data_conf['utterances_per_speaker'])
     )
     callbacks = []
     for callback, conf in model_conf['callbacks'].items():
@@ -70,7 +66,7 @@ def train(conf, freeze=False):
 
 def evaluate(conf, model):
     fe_data_conf = conf['feature_data']
-    dataset_loader = DatasetLoader(fe_data_conf['path'], fe_data_conf['batch_size'])
+    dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
     test_dataset = dataset_loader.get_test_dataset()
     model.evaluate(test_dataset)
 

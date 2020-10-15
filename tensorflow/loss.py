@@ -16,11 +16,9 @@ def get_embedding_loss(N, M):
 
     def loss(_, S):
         # Eq (6) & Eq (10)
-        # print(f'S: {S}')
         # l = tf.math.reduce_sum(
         #     -S_true + tf.math.log(tf.math.reduce_sum(tf.exp(S), axis=1, keepdims=True) + 1e-6)
         # )
-        # print(f'loss score: {l}')
         l = tf.math.reduce_sum(
             tf.abs(S - S_true)
         )
