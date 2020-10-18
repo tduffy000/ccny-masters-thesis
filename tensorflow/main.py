@@ -4,8 +4,12 @@ import os
 import time
 import tensorflow as tf
 from logger import logger
+
+from loader import BatchLoader
+from features import SpectrogramExtractor
+from serializer import GE2ESpectrogramSerializer
+
 from dataset import GE2EDatasetLoader
-# from transformer import GE2EBatchLoader
 from model import SpeakerVerificationModel
 from loss import get_embedding_loss
 from utils import get_callback, get_optimizer
@@ -15,20 +19,24 @@ def feature_engineering(conf):
     fe_conf = conf['features']
     fe_data_conf = conf['feature_data']
 
-    GE2EBatchLoader(
+    extractor = SpectrogramExtractor(
+        window_length=fe_conf['window_length'],   # in seconds
+        overlap_percent=fe_conf['overlap_percent'], # in percent
+        frame_length=fe_conf['frame_length'],    # in seconds
+        hop_length=fe_conf['hop_length'],      # in seconds
+        sr=16000,
+        n_fft=512,
+        n_mels=40,
+        trim_top_db=30
+    )
+
+    BatchLoader(
         root_dir=raw_data_conf['path'],
         datasets=raw_data_conf['datasets'],
         target_dir=fe_data_conf['path'],
-        train_split=fe_data_conf['train_split'],
-        tfrecord_examples_per_file=fe_data_conf['tfrecord_examples_per_file'],
-        window_length=fe_conf['window_length'], # in seconds
-        overlap_percent=fe_conf['overlap_percent'], # in percent
-        frame_length=fe_conf['frame_length'], # in seconds
-        hop_length=fe_conf.get('hop_length', -1), # in seconds
-        n_fft=fe_conf.get('n_fft', -1),
-        n_mels=fe_conf.get('n_mels', -1),
-        sr=conf['sr'],
-        trim_top_db=fe_conf['trim_top_db'],
+        train_split=0.8,
+        feature_extractor=extractor,
+        serializer=GE2ESpectrogramSerializer(),
         speakers_per_batch=fe_data_conf['speakers_per_batch'],
         utterances_per_speaker=fe_data_conf['utterances_per_speaker']
     ).load()

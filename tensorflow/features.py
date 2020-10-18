@@ -6,7 +6,7 @@ class FeatureExtractor:
 
     def __init__(
         self,
-        window_length, # in seconds
+        window_length,   # in seconds
         overlap_percent, # in percent
         sr=16000,
         trim_top_db=30
@@ -18,16 +18,17 @@ class FeatureExtractor:
         self.overlap = int(self.window_length * overlap_percent)
         self.trim_top_db = trim_top_db
 
-    def _get_intervals(self, y):
+    def get_intervals(self, path):
         """
         Converts a single channel raw waveform into multiple windows (rows in the target)
         where each window is of length `window_length` and they have an overlap of `overlap`.
 
         :param y: The single channel raw waveform loaded from librosa.load().
         :type y: numpy.ndarray shape=[num_samples, ]
-        :return: The windows of this waveform.
-        :rtype: numpy.ndarray shape=[num_windows, window_length]
+        :return: Number of intervals and the windowed waveform.
+        :rtype: (int, numpy.ndarray shape=[num_windows, window_length])
         """
+        y, _ = librosa.load(path, self.sr)
         # first we split the raw waveform into utterances using librosa's voice activity detection
         intervals = [ 
             itv for itv in librosa.effects.split(y, top_db=self.trim_top_db) if itv[1] - itv[0] >= self.window_length
@@ -39,16 +40,16 @@ class FeatureExtractor:
             frames = librosa.util.frame(utterance, frame_length=self.window_length, hop_length=self.overlap, axis=0)
             for frame in frames:
                 windows.append(frame)
-        return windows
+        return len(intervals), windows
 
 class SpectrogramExtractor(FeatureExtractor):
 
     def __init__(
         self,
-        window_length, # in seconds
+        window_length,   # in seconds
         overlap_percent, # in percent
-        frame_length, # in seconds
-        hop_length, # in seconds
+        frame_length,    # in seconds
+        hop_length,      # in seconds
         sr=16000,
         n_fft=512,
         n_mels=40,
@@ -66,8 +67,23 @@ class SpectrogramExtractor(FeatureExtractor):
         self.n_mels=n_mels
         self.log_lift = 1e-6
 
-    def as_features(self, y):
-        for w in self._get_intervals(y):
+    def get_feature_shape(self, path):
+        try:
+            return next(self.as_features(path)).shape
+        except StopIteration:
+            return None
+
+    @staticmethod
+    def validate_numeric(feature):
+        nans_found = np.sum(np.isnan(feature))
+        infs_found = np.sum(np.isinf(feature))
+        if nans_found > 0 or infs_found > 0:
+            logger.fatal('Found a NaN or Infinity!')
+            raise ValueError('Features must have real-valued elements.')
+
+    def as_features(self, path):
+        _, windows = self.get_intervals(path)
+        for w in windows:
             feature = librosa.feature.melspectrogram(
                 w,
                 sr=self.sr,
@@ -76,4 +92,5 @@ class SpectrogramExtractor(FeatureExtractor):
                 win_length=self.frame_length,
                 hop_length=self.hop_length
             )
+            self.validate_numeric(feature)
             yield np.log10(feature + self.log_lift)
