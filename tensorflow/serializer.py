@@ -120,5 +120,5 @@ class GE2ESpectrogramSerializer(FeatureSerializer):
         example = tf.io.parse_example(proto, feature_map)
         batch_size, height, width = example['metadata/batch_size'], example['spectrograms/height'], example['spectrograms/width']
         inputs = tf.reshape(example['spectrograms/encoded'], [batch_size, height, width])
-        targets = example['speakers/id']
-        return inputs, targets
+        # this model doesn't use the speaker id's for loss; so throw it away
+        return inputs, tf.zeros(batch_size)
