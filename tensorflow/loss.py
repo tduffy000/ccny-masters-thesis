@@ -9,18 +9,14 @@ def get_embedding_loss(N, M):
         N: The number of unique speakers in a batch.
         M: The number of utterances from each speaker in a batch.
     """
-    # cosine similarity is 1.0 if from same speaker, otherwise 0
-    S_true = np.zeros((N*M, N))
+    S_true = -np.ones((N*M, N))
     for i in range(N):
         S_true[i*M:i*M+M,i] = 1.0
 
     def loss(_, S):
         # Eq (6) & Eq (10)
-        # l = tf.math.reduce_sum(
-        #     -S_true + tf.math.log(tf.math.reduce_sum(tf.exp(S), axis=1, keepdims=True) + 1e-6)
-        # )
         l = tf.math.reduce_sum(
-            tf.abs(S - S_true)
+            -S_true + tf.math.log(tf.math.reduce_sum(tf.exp(S), axis=1, keepdims=True) + 1e-6)
         )
         return l
     return loss

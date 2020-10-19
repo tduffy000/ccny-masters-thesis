@@ -8,8 +8,8 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
 
     def __init__(self, n_speakers, utterances_per_speaker, embedding_length):
         super(SpeakerSimilarityMatrixLayer, self).__init__()
-        self.W = tf.Variable(name='W', trainable=True, initial_value=10.)
-        self.b = tf.Variable(name='b', trainable=True, initial_value=-5.)
+        self.W = tf.Variable(name='W', trainable=True, initial_value=0.1)
+        self.b = tf.Variable(name='b', trainable=True, initial_value=-0.1)
         self.N = n_speakers
         self.M = utterances_per_speaker
         self.P = embedding_length

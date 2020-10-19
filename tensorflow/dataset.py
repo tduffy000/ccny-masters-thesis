@@ -29,7 +29,7 @@ class DatasetLoader:
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         dataset = tf.data.Dataset.from_tensor_slices(tfrecord_file_paths)
         num_shards = len(tfrecord_file_paths)
-        dataset = dataset.shuffle(num_shards).interleave(lambda f: tf.data.TFRecordDataset(f), deterministic=False,cycle_length=num_shards).shuffle(self.records_per_file).map(self.serializer.deserialize)
+        dataset = dataset.shuffle(num_shards).interleave(lambda f: tf.data.TFRecordDataset(f), deterministic=False, cycle_length=8).shuffle(self.records_per_file).map(self.serializer.deserialize)
         if self.batch_size is not None: # can be already provided
             dataset = dataset.batch(self.batch_size)
         return dataset
