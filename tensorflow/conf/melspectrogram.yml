@@ -4,19 +4,18 @@ raw_data:
   datasets:
     LibriSpeech:
       - dev-clean
-      # - dev-other
+      - dev-other
       # - test-clean
-      # - test-other
-      # - train-clean-100
+      - test-other
+      - train-clean-100
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   train_split: 0.65
-  tfrecord_examples_per_file: 5000
   speakers_per_batch: 8
   utterances_per_speaker: 4
 features:
   type: melspectrogram
-  window_length: 0.28125
+  window_length: 1.2   # seconds
   overlap_percent: 0.5 # out of 1.0
   frame_length: 0.025  # seconds
   hop_length: 0.01     # seconds
@@ -29,7 +28,6 @@ train:
     optimizer:
       type: Adam
       lr: 0.001
-      clipnorm: 2.0
     dropout: 0.1
     layers:
       - lstm:
@@ -38,8 +36,6 @@ train:
       - lstm:
           units: 128
           return_sequences: False
-      - fc:
-          nodes: 768
       - embedding:
           nodes: 256
       - similarity_matrix:

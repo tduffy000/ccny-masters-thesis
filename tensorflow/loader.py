@@ -33,6 +33,7 @@ class BatchLoader:
         self.utterances_per_speaker = utterances_per_speaker
 
         self.num_files_created = {}
+        self.speaker_id_mapping = {}
 
     @staticmethod
     def get_speaker_id_from_path(path, parent):
@@ -49,6 +50,11 @@ class BatchLoader:
     def update_feature_shape(self, path):
         if self.feature_shape is None:
             self.feature_shape = self.feature_extractor.get_feature_shape(path)
+
+    def update_speaker_id_mapping(self, speaker_file_mapping):
+        for speaker_id in speaker_file_mapping:
+            if speaker_id not in self.speaker_id_mapping:
+                self.speaker_id_mapping[speaker_id] = len(self.speaker_id_mapping)
 
     def get_files(self):
         # mapping of speaker_id -> [(n_features, path), ...]
@@ -73,12 +79,13 @@ class BatchLoader:
     def build_batch(self, file_mapping, n_speakers, utterances_per_speaker):
         N, M = n_speakers, utterances_per_speaker
         batch = np.zeros((N*M, self.feature_shape[0], self.feature_shape[1]))
-        labels = []
+        speakers, labels = [], []
 
         batch_speakers = random.sample(list(file_mapping.keys()), k=N)
 
         # for every speaker i = 0, ..., N; get M utterances for the batch
         for i, speaker in enumerate(batch_speakers):
+            mapped_id = self.speaker_id_mapping[speaker]
             j = i*M
             while j < (i+1)*M:
 
@@ -91,9 +98,11 @@ class BatchLoader:
                 random.shuffle(features)
                 for feature in features[:M]:
                     batch[j,:,:] = feature
-                    labels.append(speaker)
+                    speakers.append(speaker)
+                    labels.append(mapped_id)
                     j += 1
-        pb = self.serializer.serialize(batch, labels)
+                    
+        pb = self.serializer.serialize(batch, speakers, labels)
         return pb
 
     # TODO: put this in the serializer?
@@ -124,6 +133,7 @@ class BatchLoader:
 
     def load(self):
         speaker_file_mapping = self.get_files()
+        self.update_speaker_id_mapping(speaker_file_mapping)
         while True:
             self.filter_keys_for_batches(speaker_file_mapping, self.utterances_per_speaker)
             if len(speaker_file_mapping) < self.speakers_per_batch:
@@ -137,7 +147,8 @@ class BatchLoader:
             'batch_size': self.speakers_per_batch * self.utterances_per_speaker,
             'speakers_per_batch': self.speakers_per_batch,
             'utterances_per_speaker': self.utterances_per_speaker,
-            'datasets': self.datasets
+            'datasets': self.datasets,
+            'speaker_id_mapping': self.speaker_id_mapping
         }
         logger.info(f'Finished creating features, with metadata: {metadata}')
         with open(f'{self.target_dir}/metadata.json', 'w') as stream:

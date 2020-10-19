@@ -8,8 +8,8 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
 
     def __init__(self, n_speakers, utterances_per_speaker, embedding_length):
         super(SpeakerSimilarityMatrixLayer, self).__init__()
-        self.W = tf.Variable(trainable=True, initial_value=1.)
-        self.b = tf.Variable(trainable=True, initial_value=-1.)
+        self.W = tf.Variable(name='W', trainable=True, initial_value=10.)
+        self.b = tf.Variable(name='b', trainable=True, initial_value=-5.)
         self.N = n_speakers
         self.M = utterances_per_speaker
         self.P = embedding_length
@@ -36,7 +36,8 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
             [tf.matmul(utterance_embeddings[i], centroids, transpose_b=True) for i in range(self.N)],
             axis=0
         )
-        return tf.abs(self.W) * S + self.b
+        # we shouldn't need the clipping here
+        return tf.clip_by_value(tf.abs(self.W) * S + self.b, -1.0, 1.0)
 
 
 class SpeakerVerificationModel(tf.keras.Model):
