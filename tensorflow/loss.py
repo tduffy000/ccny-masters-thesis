@@ -34,9 +34,10 @@ def false_rejection_ratio(S_thres, N, M):
     """
     The ratio of falsely rejected geniune speakers over all genuine speakers (type I errors).
     """
-    total_fn = sum([M - np.sum(S_thres[i,i:i+M]) for i in range(N)])
-    return total_fn/(N*M)
-
+    total_real_speaker_utterances = N*M
+    total_rejected = sum([ np.sum(S_thres[i:i+M,i] != True) for i in range(N)])
+    return total_rejected / total_real_speaker_utterances
+    
 def equal_error_ratio(S, N, M, threshold_start=0.5, threshold_step=0.01, iters=50):
     """
     The ratio at which FAR and FRR (defined above) are equivalent.
