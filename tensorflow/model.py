@@ -8,8 +8,8 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
 
     def __init__(self, n_speakers, utterances_per_speaker, embedding_length):
         super(SpeakerSimilarityMatrixLayer, self).__init__()
-        self.W = tf.Variable(name='W', trainable=True, initial_value=0.1)
-        self.b = tf.Variable(name='b', trainable=True, initial_value=-0.1)
+        self.W = tf.Variable(name='W', trainable=True, initial_value=10.)
+        self.b = tf.Variable(name='b', trainable=True, initial_value=-5.)
         self.N = n_speakers
         self.M = utterances_per_speaker
         self.P = embedding_length
@@ -24,7 +24,9 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
             to the N centroids (representing the averaged embedding for a given speaker).
         """
         # [n_speakers x utterances x embedding_length]
+        inputs = tf.math.l2_normalize(inputs, axis=1)
         utterance_embeddings = tf.reshape(inputs, shape=[self.N, self.M, self.P])
+
         # the averaged embeddings for each speaker: [n_speakers x embedding_length]
         centroids = tf.math.l2_normalize(
             tf.reduce_mean(utterance_embeddings, axis=1),
@@ -36,8 +38,7 @@ class SpeakerSimilarityMatrixLayer(tf.keras.layers.Layer):
             [tf.matmul(utterance_embeddings[i], centroids, transpose_b=True) for i in range(self.N)],
             axis=0
         )
-        # we shouldn't need the clipping here
-        return tf.clip_by_value(tf.abs(self.W) * S + self.b, -1.0, 1.0)
+        return tf.abs(self.W) * S + self.b
 
 
 class SpeakerVerificationModel(tf.keras.Model):
@@ -113,11 +114,11 @@ class SpeakerVerificationModel(tf.keras.Model):
         ]
 
     @staticmethod
-    def get_bidirectional(inner, units):
+    def get_bidirectional(inner, units, return_sequences=False):
         if inner == 'lstm':
-            inner_layer = tf.keras.layers.LSTM(units)
+            inner_layer = tf.keras.layers.LSTM(units=units, return_sequences=return_sequences)
         elif inner == 'gru':
-            inner_layer = tf.keras.layers.GRU(units)
+            inner_layer = tf.keras.layers.GRU(units=units, return_sequences=return_sequences)
         return [tf.keras.layers.Bidirectional(inner_layer)]
 
     @staticmethod
@@ -153,11 +154,11 @@ class SpeakerVerificationModel(tf.keras.Model):
                     layer['kernel_size']
                 )
             elif layer_type == 'lstm':
-                self.layer_list += self.get_lstm(units=layer['units'], return_sequences=layer['return_sequences'])
+                self.layer_list += self.get_lstm(units=layer['units'], return_sequences=layer.get('return_sequences', False))
             elif layer_type == 'gru':
-                self.layer_list += self.get_gru(units=layer['units'], return_sequences=layer['return_sequences'])
+                self.layer_list += self.get_gru(units=layer['units'], return_sequences=layer.get('return_sequences', False))
             elif layer_type == 'bidirectional':
-                self.layer_list += self.get_bidirectional(layer['inner'], layer['units'])
+                self.layer_list += self.get_bidirectional(layer['inner'], layer['units'], layer.get('return_sequences', False))
             elif layer_type == 'flatten':
                 self.layer_list += [tf.keras.layers.Flatten()]
             elif layer_type == 'fc':

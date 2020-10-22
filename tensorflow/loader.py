@@ -1,6 +1,7 @@
 import json
-import os
 import random
+import os
+import shutil
 
 import numpy as np
 import tensorflow as tf
@@ -14,7 +15,6 @@ class BatchLoader:
         root_dir,
         datasets,
         target_dir,
-        train_split,
         feature_extractor,
         serializer,
         speakers_per_batch,
@@ -23,7 +23,6 @@ class BatchLoader:
         self.root_dir = root_dir
         self.datasets = datasets
         self.target_dir = target_dir
-        self.train_split = train_split
 
         self.feature_extractor = feature_extractor
         self.feature_shape = None
@@ -35,11 +34,6 @@ class BatchLoader:
         self.num_files_created = {}
         self.speaker_id_mapping = {}
 
-    @staticmethod
-    def get_speaker_id_from_path(path, parent):
-        if parent == 'LibriSpeech':
-            return path.split('/')[-2]
-    
     @staticmethod
     def is_audio_file(fname):
         for ftype in ['.flac', '.wav']:
@@ -56,15 +50,15 @@ class BatchLoader:
             if speaker_id not in self.speaker_id_mapping:
                 self.speaker_id_mapping[speaker_id] = len(self.speaker_id_mapping)
 
-    def get_files(self):
+    def get_files(self, datasets):
         # mapping of speaker_id -> [(n_features, path), ...]
         file_mapping = {}
-        for parent, subsets in self.datasets.items():
+        for parent, subsets in datasets.items():
             for subset in subsets:
                 subset_path = os.path.join(self.root_dir, parent, subset)
                 for root, dirs, files in os.walk(subset_path):
                     if files and not dirs:
-                        speaker_id = f'{parent}/{subset}/{int(root.split("/")[-2])}'
+                        speaker_id = f'{parent}/{subset}/{root.split("/")[-2]}' # both LibriSpeech and VoxCeleb1 have it as this level
 
                         audio_files = list(filter(self.is_audio_file, files))
                         for f in audio_files:
@@ -106,8 +100,7 @@ class BatchLoader:
         return pb
 
     # TODO: put this in the serializer?
-    def write_batch(self, pb):
-        subdir = 'train'
+    def write_batch(self, pb, subdir='train'):
         subdir_path = f'{self.target_dir}/{subdir}'
         if not os.path.exists(subdir_path):
             os.makedirs(subdir_path)
@@ -132,14 +125,44 @@ class BatchLoader:
             files.pop(speaker, None)
 
     def load(self):
-        speaker_file_mapping = self.get_files()
-        self.update_speaker_id_mapping(speaker_file_mapping)
-        while True:
-            self.filter_keys_for_batches(speaker_file_mapping, self.utterances_per_speaker)
-            if len(speaker_file_mapping) < self.speakers_per_batch:
+
+        # load training data
+        in_sample_datasets = self.datasets['train']
+        in_sample_speaker_file_mapping = self.get_files(in_sample_datasets)
+        self.update_speaker_id_mapping(in_sample_speaker_file_mapping)
+        
+        shutil.rmtree(f'{self.target_dir}/train')
+        while True: # TODO: DRY candidate
+            self.filter_keys_for_batches(in_sample_speaker_file_mapping, self.utterances_per_speaker)
+            if len(in_sample_speaker_file_mapping) < self.speakers_per_batch:
                 break
-            batch = self.build_batch(speaker_file_mapping, self.speakers_per_batch, self.utterances_per_speaker)
-            self.write_batch(batch)
+            batch = self.build_batch(
+                in_sample_speaker_file_mapping,
+                self.speakers_per_batch,
+                self.utterances_per_speaker
+            )
+            self.write_batch(batch, subdir='train')
+
+        test_dataset_conf = self.datasets.get('test', None)
+        if test_dataset_conf is not None:
+            shutil.rmtree(f'{self.target_dir}/test')
+            if 'out_of_sample' in test_dataset_conf:
+                test_datasets = test_dataset_conf['out_of_sample']
+                out_of_sample_speaker_file_mapping = self.get_files(test_datasets)
+                self.update_speaker_id_mapping(out_of_sample_speaker_file_mapping)
+                while True: # TODO: DRY candidate
+                    self.filter_keys_for_batches(
+                        out_of_sample_speaker_file_mapping,
+                        self.utterances_per_speaker
+                    )
+                    if len(out_of_sample_speaker_file_mapping) < self.speakers_per_batch:
+                        break
+                    batch = self.build_batch(
+                        out_of_sample_speaker_file_mapping,
+                        self.speakers_per_batch,
+                        self.utterances_per_speaker
+                    )
+                    self.write_batch(batch, subdir='test')
 
         metadata = {
             'feature_shape': self.feature_shape,

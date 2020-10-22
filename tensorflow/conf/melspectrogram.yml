@@ -2,15 +2,19 @@ sr: 16000
 raw_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
   datasets:
-    LibriSpeech:
-      - dev-clean
-      - dev-other
-      # - test-clean
-      - test-other
-      - train-clean-100
+    train:
+      LibriSpeech:
+        - dev-clean
+        - dev-other
+    test:
+      # in_sample: # use a percentage of the training set
+      #   test_split: 0.3
+      out_of_sample:
+        LibriSpeech:
+          - test-clean
+          - test-other
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
-  train_split: 0.65
   speakers_per_batch: 8
   utterances_per_speaker: 4
 features:
@@ -26,8 +30,9 @@ train:
   epochs: 50
   network:
     optimizer:
-      type: Adam
-      lr: 0.001
+      type: SGD
+      lr: 0.01
+      clipnorm: 3.0
     dropout: 0.1
     layers:
       - lstm:
@@ -35,7 +40,6 @@ train:
           return_sequences: True
       - lstm:
           units: 128
-          return_sequences: False
       - embedding:
           nodes: 256
       - similarity_matrix:

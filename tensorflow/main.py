@@ -2,16 +2,16 @@ import argparse
 import yaml
 import os
 import time
-import tensorflow as tf
-from logger import logger
 
-from loader import BatchLoader
-from features import SpectrogramExtractor
-from serializer import GE2ESpectrogramSerializer
+import tensorflow as tf
 
 from dataset import GE2EDatasetLoader
+# from features import SpectrogramExtractor
+from loader import BatchLoader
+from logger import logger
+from loss import equal_error_ratio, get_embedding_loss
 from model import SpeakerVerificationModel
-from loss import get_embedding_loss
+from serializer import GE2ESpectrogramSerializer
 from utils import get_callback, get_optimizer
 
 def feature_engineering(conf):
@@ -34,7 +34,6 @@ def feature_engineering(conf):
         root_dir=raw_data_conf['path'],
         datasets=raw_data_conf['datasets'],
         target_dir=fe_data_conf['path'],
-        train_split=0.8,
         feature_extractor=extractor,
         serializer=GE2ESpectrogramSerializer(),
         speakers_per_batch=fe_data_conf['speakers_per_batch'],
@@ -69,14 +68,31 @@ def train(conf, freeze=False):
         if cb is not None:
             callbacks.append(cb)
     model.fit(train_dataset, epochs=train_conf['epochs'], callbacks=callbacks)
-    logger.info('Finished training, now evaluating...')
     return model
 
 def evaluate(conf, model):
     fe_data_conf = conf['feature_data']
     dataset_loader = GE2EDatasetLoader(fe_data_conf['path'])
-    test_dataset = dataset_loader.get_test_dataset()
+    train_dataset, test_dataset = dataset_loader.get_datasets()
+    N = fe_data_conf['speakers_per_batch']
+    M = fe_data_conf['utterances_per_speaker']
+    # calculate loss on test set
     model.evaluate(test_dataset)
+
+    # calculate EER on train & test sets
+    threshold_counts = {'train': {}, 'test': {}}
+    for i, (inputs, _) in enumerate(train_dataset):
+        S = model(inputs)
+        threshold, EER = equal_error_ratio(S, N, M)
+        logger.info(f'Train Iteration: {i}\tEER: {EER}\tthreshold: {threshold}')
+        threshold_counts['train'][threshold] = threshold_counts.get(threshold, 0) + 1
+
+    for i, (inputs, _) in enumerate(test_dataset):
+        S = model(inputs)
+        threshold, EER = equal_error_ratio(S, N, M)
+        logger.info(f'Test Iteration: {i}\tEER: {EER}\tthreshold: {threshold}')
+        threshold_counts['test'][threshold] = threshold_counts.get(threshold, 0) + 1
+    # pick out best threshold for train & test sets; run EER on both
 
 def freeze(model, tflite=True):
     epoch_time = int(time.time())
@@ -108,6 +124,7 @@ def main(args):
             tf.keras.backend.clear_session()
 
         model = train(conf, args.freeze_model)
+        # calculate loss on test set
         evaluate(conf, model)
 
         if args.freeze_model:

@@ -1,18 +1,18 @@
 import json
 import os
+
 import tensorflow as tf
+
 from logger import logger
 from serializer import SpectrogramSerializer, GE2ESpectrogramSerializer
-
-# TODO: we might not need the metadata here anymore
-SHUFFLE_SIZE = 5000
 
 class DatasetLoader:
 
     def __init__(
         self,
         root_dir,
-        batch_size
+        batch_size,
+        interleave_cycle_length=8
     ):
         self.train_dir = f'{root_dir}/train'
         self.test_dir = f'{root_dir}/test'
@@ -22,14 +22,19 @@ class DatasetLoader:
             self.example_dim = len(self.metadata['feature_shape'])
         self.records_per_file = self.metadata['batch_size'] # TODO: address this when writing more than one batch to a file
         self.serializer = SpectrogramSerializer()
+        self.interleave_cycle_length = interleave_cycle_length
 
-    # https://github.com/tensorflow/tensorflow/issues/14857
     def _prep_dataset(self, dir):
+        """
+        
+        Args:
+            dir: 
+        """
         tfrecord_file_names = list(filter(lambda f: f.endswith('.tfrecords'), os.listdir(dir)))
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         dataset = tf.data.Dataset.from_tensor_slices(tfrecord_file_paths)
         num_shards = len(tfrecord_file_paths)
-        dataset = dataset.shuffle(num_shards).interleave(lambda f: tf.data.TFRecordDataset(f), deterministic=False, cycle_length=8).shuffle(self.records_per_file).map(self.serializer.deserialize)
+        dataset = dataset.shuffle(num_shards).interleave(lambda f: tf.data.TFRecordDataset(f), deterministic=False, cycle_length=self.interleave_cycle_length).shuffle(self.records_per_file).map(self.serializer.deserialize)
         if self.batch_size is not None: # can be already provided
             dataset = dataset.batch(self.batch_size)
         return dataset
@@ -61,5 +66,5 @@ class DatasetLoader:
 class GE2EDatasetLoader(DatasetLoader):
 
     def __init__(self, root_dir):
-        super().__init__(root_dir, None)
+        super().__init__(root_dir, None) # batch_size is n_speakers x utterances_per_speaker
         self.serializer = GE2ESpectrogramSerializer()
