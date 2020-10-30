@@ -1,8 +1,45 @@
+#include <TensorFlowLite.h>
+#include <Stepper.h>
+
 /***************************
  * Example Sketch for the SparkFun MEMS Microphone Breakout Board
  * Written by jenfoxbot <jenfoxbot@gmail.com>
  * Code is open-source, beer/coffee-ware license.
  */
+
+/**
+ * Frame audio into short windows to prepare for Fourier transform
+ */
+std::vector<std::vector<float>> frame(wv std::valarray<float>, winLength int, hopLength int) {
+  int offset = 0;
+  std::vector<std::vector<float>> frames;
+
+  while (offset < wv.size() - winLength) {
+      
+      std::vector<float> frame;
+      for(int i = 0; i < winLength; ++i) {
+          frame.push_back(wav[offset+i]);
+      }
+      frames.push_back(frame);
+      offset += signalHopLength;
+  }
+  return frames;
+}
+
+/**
+ * Perform windowing  
+ */
+void hamming(int winLength, std::vector<&std::valarray<float>> frames) {}
+
+/**
+ * Apply the Fourier transform and then compute the Power spectrum.
+ */
+void stft() {}
+
+/**
+ * Apply filter banks.
+ */
+void filterBank() {}
 
 // Connect the MEMS AUD output to the Arduino A0 pin
 int mic = A0;
@@ -12,8 +49,7 @@ const int sampleTime = 50;
 int micOut;
 
 // TODO: voice activity detection to begin recording samples
-
-// TODO: spectrogram calculation
+const int noiseThreshold = 20;
 
 void setup() {
   Serial.begin(9600);
@@ -23,7 +59,6 @@ void loop() {
    int micOutput = findPTPAmp();
    VUMeter(micOutput);   
 }   
-
 
 // Find the Peak-to-Peak Amplitude Function
 int findPTPAmp(){
