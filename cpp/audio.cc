@@ -38,6 +38,19 @@ class IOHandler {
             return raw;
         };
 
+        // DRY this up, us the iterator template
+        static void write(std::valarray<std::valarray<float>> mat, std::string path) {
+            std::ofstream out_file;
+            std::ostream_iterator<float> out_it (out_file, ",");
+
+            out_file.open (path);
+            for (const auto& row : mat) {
+                std::copy(std::begin(row), std::end(row), out_it);
+                out_file << std::endl;
+            }
+            out_file.close();
+        };
+
         static void write(std::vector<std::valarray<float>> frames, std::string path) {
             std::ofstream out_file;
             std::ostream_iterator<float> out_it (out_file, ",");
@@ -55,12 +68,15 @@ class IOHandler {
 class AudioPreparer {
 
     public:
+        typedef std::complex<float> Complex;
+        typedef std::valarray<float> Waveform;
+        typedef std::valarray<std::valarray<float>> Matrix;
+
         // https://www.oreilly.com/library/view/c-cookbook/0596007612/ch11s18.html        
         // https://rosettacode.org/wiki/Fast_Fourier_transform#C.2B.2B
         // https://cp-algorithms.com/algebra/fft.html
-        typedef std::complex<float> Complex;
-
-        static void fft(std::valarray<Complex> x) {
+        // https://github.com/numpy/numpy/blob/92ebe1e9a6aeb47a881a1226b08218175776f9ea/numpy/fft/_pocketfft.py#L287
+        static void fft(std::valarray<Complex>& x) {
             const size_t N = x.size();
             if (N <= 1) return;
 
@@ -77,9 +93,9 @@ class AudioPreparer {
             };
         };
 
-        static std::vector<std::valarray<float>> frame(std::valarray<float> wv, int win_length, int hop_length) {
+        static std::vector<Waveform> frame(Waveform wv, int win_length, int hop_length) {
             int offset = 0;
-            std::vector<std::valarray<float>> frames;
+            std::vector<Waveform> frames;
 
             while (offset < wv.size() - win_length) {
                 frames.push_back( wv[std::slice(offset, win_length, 1)] );
@@ -88,17 +104,48 @@ class AudioPreparer {
             return frames;
         };
 
-        static void hamming(std::valarray<float>& window, int length) {
+        static void hamming(Waveform& window, int length) {
             for(int i = 0; i < window.size(); i++) {
                 window[i] *= 0.54 - (0.46 * std::cos( (2 * PI * i) / (length - 1) ));
             }
         };
 
+        // I'm not certain this is the implementation they use
+        static Waveform pad(Waveform& window, int offset) {
+            Waveform padded(window.size() + 2 * offset);
+            for (int i = 0; i < window.size(); i++) {
+                padded[i+offset] = window[i];
+            }
+            return padded;
+        }
+
         // https://github.com/librosa/librosa/blob/a53fa56bdb6695a994008d5b6ccd0100870a6036/librosa/core/spectrum.py#L42
-        static std::valarray<float> stft(std::valarray<float>& window, int nfft) {
-            // if nfft > window.size(); do we pad with zeros?
-            fft(window);
-            return std::pow(std::abs(window), 2.0f) / nfft;
+        static Matrix stft(std::vector<Waveform>& windows, int nfft = 512, float power = 1.0f) {
+            
+            bool to_pad = windows[0].size() < nfft;
+            int length = to_pad ? nfft : windows[0].size();
+
+            Matrix m (windows.size());
+
+            int offset = to_pad ? (nfft - windows[0].size())/2 : 0;
+            for (int i = 0; i < windows.size(); i++) {
+
+                Waveform padded = pad(windows[i], offset);
+                hamming(padded, nfft);
+                std::valarray<Complex> complex_window (padded.size());
+                for(int i = 0; i < padded.size(); i++) {
+                    complex_window[i] = (Complex) padded[i];
+                }
+                fft(complex_window);
+
+                std::valarray<float> real_part (complex_window.size());
+                for (int i = 0; i < complex_window.size(); i++) {
+                    real_part[i] = std::abs(complex_window[i]);
+                }
+                m[i] = real_part;
+            }
+
+            return m;
         };
 
         // https://github.com/librosa/librosa/blob/master/librosa/feature/spectral.py#L1873
@@ -111,33 +158,31 @@ class AudioPreparer {
 int main() {
 
     std::string wave_path = "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/sample_wave.out";
-    std::valarray<float> raw_wave = IOHandler::load(wave_path);
+    AudioPreparer::Waveform raw_wave = IOHandler::load(wave_path);
 
     // test framing
-    std::vector<std::valarray<float>> frames = AudioPreparer::frame(raw_wave, WIN_LENGTH, HOP_LENGTH);
+    std::vector<AudioPreparer::Waveform> frames = AudioPreparer::frame(raw_wave, WIN_LENGTH, HOP_LENGTH);
     IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/orig_frames.txt");
 
     // test Hamming window
-    for (auto& frame : frames) {
-        AudioPreparer::hamming(frame, WIN_LENGTH);
-    }
-    IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/hamming_frames.txt");
+    // for (auto& frame : frames) {
+    //     AudioPreparer::hamming(frame, WIN_LENGTH);
+    // }
+    // IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/hamming_frames.txt");
 
     // test stft
-    for (auto& frame : frames) {
-        AudioPreparer::stft(frame, N_FFT);
-    }
-    IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_frames.txt");
+    AudioPreparer::Matrix m = AudioPreparer::stft(frames, N_FFT);
+    IOHandler::write(m, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_frames.txt");
 
     // test filter_bank
-    for (auto& frame : frames) {
-        AudioPreparer::filter_bank();
-    }
-    IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_bank.txt");
+    // for (auto& frame : frames) {
+    //     AudioPreparer::filter_bank();
+    // }
+    // IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_bank.txt");
 
-    // test mfcc
-    for (auto& frame : frames) {
-        AudioPreparer::mfcc();
-    }
-    IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/mfcc.txt");
+    // // test mfcc
+    // for (auto& frame : frames) {
+    //     AudioPreparer::mfcc();
+    // }
+    // IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/mfcc.txt");
 }
