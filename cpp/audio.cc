@@ -20,7 +20,6 @@ class IOHandler {
     public: 
         static std::valarray<float> load(std::string path) {
 
-            // count length
             std::fstream a(path.c_str());
             std::string l;
             int signal_length = 0;
@@ -90,7 +89,6 @@ class AudioFeatures {
             }
         };
 
-        // I'm not certain this is the implementation they use
         static Waveform pad(Waveform& window, int offset) {
             Waveform padded(window.size() + 2 * offset);
             for (int i = 0; i < window.size(); i++) {
@@ -158,7 +156,6 @@ class AudioFeatures {
             };
         };
 
-        // https://github.com/librosa/librosa/blob/a53fa56bdb6695a994008d5b6ccd0100870a6036/librosa/core/spectrum.py#L42
         static ComplexMatrix stft(std::vector<Waveform>& windows, int nfft = 512) {
             
             bool to_pad = windows[0].size() < nfft;
@@ -187,8 +184,8 @@ class AudioFeatures {
         /** Filter banks */
         static std::valarray<float> mel_filters(int nfilter, int sr) {
             float low_freq = 0.0f;
-            float high_freq = (2595 * std::log10(1 + (sr / 2)/ 700));
-            float step = (high_freq - low_freq) / nfilter;
+            float high_freq = (2595 * std::log10(1 + (sr / 2)/ 700.0f));
+            float step = (high_freq - low_freq) / (nfilter+1);
 
             std::valarray<float> filters (0.0f, nfilter+2);
             for (int i = 1; i < filters.size(); i++) {
@@ -198,13 +195,80 @@ class AudioFeatures {
         };
 
         static std::valarray<float> mel_to_hz(std::valarray<float> filts) {
-            return (700 * (std::pow(filts / 2595.0f, 10) - 1));
+            return (700 * (std::pow(10, filts / 2595.0f) - 1));
+        };
+
+        // magnitude_to_db
+
+        // power_to_db
+
+        static RealMatrix transpose(RealMatrix& a) {
+            size_t cols = a[0].size();
+            size_t rows = a.size();
+            RealMatrix transposed (cols);
+            for (size_t i = 0; i < cols; i++ ) {
+                transposed[i] = std::valarray<float> (rows);
+                for (size_t j = 0; j < rows; j++) {
+                    transposed[i][j] = a[j][i];
+                }
+            }
+            return transposed;
         }
 
-        // https://github.com/librosa/librosa/blob/master/librosa/feature/spectral.py#L1873
-        // static RealMatrix filter_bank(RealMatrix m) {
+        // (n,k) x (k,m) => (n,m)
+        static RealMatrix dot_product(RealMatrix& a, RealMatrix& b) {
+            size_t a_rows = a.size();
+            size_t a_cols = a[0].size();
+            size_t b_rows = b.size();
+            size_t b_cols = b[0].size();
+            RealMatrix dot_prod (a_rows);
 
-        // };
+            for (size_t i = 0; i < a_rows; i++) {
+                std::valarray<float> row_prod (b_cols);
+                for (size_t j = 0; j < b_cols; j++) {
+                    float s = 0;
+                    for (size_t k = 0; k < b_cols; k++) {
+                        s += a[i][k] * b[j][k];
+                    }
+                    row_prod[j] = s;
+                }
+                dot_prod[i] = row_prod;
+            }
+            return dot_prod;
+        }
+
+
+        static RealMatrix filter_banks(RealMatrix m, int nfilter = 40, int sr = 16000, int n_fft = 512) {
+            std::valarray<float> filts = mel_filters(nfilter, sr);
+            std::valarray<float> hz_points = mel_to_hz(filts);
+
+            std::valarray<float> bins (hz_points.size());
+            for (int i = 0; i < bins.size(); i++) {
+                bins[i] = std::floor((n_fft + 1) * hz_points[i] / sr);
+            }
+
+            RealMatrix fb (nfilter);
+            for (int m = 1; m < nfilter + 1; m++) {
+                int f_m_minus = bins[m-1];
+                int f_m = bins[m];
+                int f_m_plus = bins[m+1];
+
+                fb[m-1] = std::valarray<float> (n_fft / 2 + 1);
+                for (int k = f_m_minus; k < f_m; k++) {
+                    fb[m - 1][k] = (k - bins[m - 1]) / (bins[m] - bins[m - 1]);
+                }
+                for (int k = f_m; k < f_m_plus; k++) {
+                    fb[m - 1][k] = (bins[m + 1] - k) / (bins[m + 1] - bins[m]);
+                }
+            }
+
+
+            RealMatrix fb_T = transpose(fb);
+            RealMatrix filter_banks = dot_product(m, fb_T);
+
+            // numerical stability here
+            return filter_banks;
+        };
 
         /** MFCCs */
         // static RealMatrix mfcc(RealMatrix m) {
@@ -230,9 +294,8 @@ int main() {
     AudioFeatures::RealMatrix power_mat = AudioFeatures::power(m);
     IOHandler::write(power_mat, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_power_frames.txt");
 
-    // test filter_bank
-    // AudioPreparer::RealMatrix fb = AudioPreparer::filter_bank(mat);
-    // IOHandler::write(fb, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_bank.txt");
+    AudioFeatures::RealMatrix fb = AudioFeatures::filter_banks(magnitude_mat);
+    IOHandler::write(fb, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_banks.txt");
 
     // // test mfcc
     // for (auto& frame : frames) {
