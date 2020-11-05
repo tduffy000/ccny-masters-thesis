@@ -6,8 +6,6 @@
 #include <vector>
 #include <string>
 
-// https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html
-
 using namespace std;
 
 const float PI = 3.14159265358979323846;
@@ -97,7 +95,7 @@ class AudioFeatures {
             return padded;
         }
 
-        /** Fourier transform */
+        /** FOURIER TRANSFORM */
         static RealMatrix raise(ComplexMatrix& mat, float power) {
             RealMatrix m (mat.size());
             for (int i = 0; i < mat.size(); i++) {
@@ -118,8 +116,6 @@ class AudioFeatures {
             return raise(mat, 2.0f);
         };
 
-        // http://www.robots.ox.ac.uk/~sjrob/Teaching/SP/l7.pdf
-        // https://www.princeton.edu/~cuff/ele201/files/spectrogram.pdf
         static std::valarray<Complex> dft(std::valarray<Complex> &in) {
             Complex J(0, 1);
             const size_t N = in.size(); 
@@ -136,9 +132,6 @@ class AudioFeatures {
             return out;
         };
 
-        // https://rosettacode.org/wiki/Fast_Fourier_transform#C.2B.2B
-        // https://cp-algorithms.com/algebra/fft.html
-        // https://github.com/numpy/numpy/blob/92ebe1e9a6aeb47a881a1226b08218175776f9ea/numpy/fft/_pocketfft.py#L287
         static void fft(std::valarray<Complex>& x) {
             const size_t N = x.size();
             if (N <= 1) return;
@@ -181,7 +174,7 @@ class AudioFeatures {
             return m;
         };
 
-        /** Filter banks */
+        /** FILTER BANKS */
         static std::valarray<float> mel_filters(int nfilter, int sr) {
             float low_freq = 0.0f;
             float high_freq = (2595 * std::log10(1 + (sr / 2)/ 700.0f));
@@ -198,9 +191,17 @@ class AudioFeatures {
             return (700 * (std::pow(10, filts / 2595.0f) - 1));
         };
 
-        // magnitude_to_db
+        static void magnitude_to_db(RealMatrix& a) {
+            for(size_t row = 0; row < a.size(); row++) {
+                a[row] = 20.0f * std::log10(a[row]);
+            }
+        };
 
-        // power_to_db
+        static void power_to_db(RealMatrix& a) {
+            for(size_t row = 0; row < a.size(); row++) {
+                a[row] = 10.0f * std::log10(a[row]);
+            }
+        };
 
         static RealMatrix transpose(RealMatrix& a) {
             size_t cols = a[0].size();
@@ -221,22 +222,20 @@ class AudioFeatures {
             size_t a_cols = a[0].size();
             size_t b_rows = b.size();
             size_t b_cols = b[0].size();
-            RealMatrix dot_prod (a_rows);
+            RealMatrix dot_prod (a_rows); // [a_rows x a_cols] * [b_rows x b_cols] |=> [a_rows x b_cols]
 
-            for (size_t i = 0; i < a_rows; i++) {
-                std::valarray<float> row_prod (b_cols);
-                for (size_t j = 0; j < b_cols; j++) {
-                    float s = 0;
-                    for (size_t k = 0; k < b_cols; k++) {
-                        s += a[i][k] * b[j][k];
+            // initialize just above zero for numerical stability in log
+            for (size_t r = 0; r < a_rows; r++) dot_prod[r] = std::valarray<float> (0.000001f, b_cols);
+
+            for (size_t i = 0; i < a_rows; ++i) {
+                for (size_t j = 0; j < b_cols; ++j ) {
+                    for (size_t k = 0; k < a_cols; ++k) {
+                        dot_prod[i][j] += a[i][k] * b[k][j];
                     }
-                    row_prod[j] = s;
                 }
-                dot_prod[i] = row_prod;
             }
             return dot_prod;
-        }
-
+        };
 
         static RealMatrix filter_banks(RealMatrix m, int nfilter = 40, int sr = 16000, int n_fft = 512) {
             std::valarray<float> filts = mel_filters(nfilter, sr);
@@ -262,11 +261,9 @@ class AudioFeatures {
                 }
             }
 
-
             RealMatrix fb_T = transpose(fb);
             RealMatrix filter_banks = dot_product(m, fb_T);
 
-            // numerical stability here
             return filter_banks;
         };
 
@@ -282,11 +279,9 @@ int main() {
     std::string wave_path = "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/sample_wave.out";
     AudioFeatures::Waveform raw_wave = IOHandler::load(wave_path);
 
-    // test framing
     std::vector<AudioFeatures::Waveform> frames = AudioFeatures::frame(raw_wave, WIN_LENGTH, HOP_LENGTH);
     IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/orig_frames.txt");
 
-    // test stft
     AudioFeatures::ComplexMatrix m = AudioFeatures::stft(frames, N_FFT);
     AudioFeatures::RealMatrix magnitude_mat = AudioFeatures::magnitude(m);
     IOHandler::write(magnitude_mat, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_magnitude_frames.txt");
@@ -295,7 +290,8 @@ int main() {
     IOHandler::write(power_mat, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_power_frames.txt");
 
     AudioFeatures::RealMatrix fb = AudioFeatures::filter_banks(magnitude_mat);
-    IOHandler::write(fb, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_banks.txt");
+    AudioFeatures::magnitude_to_db(fb);
+    IOHandler::write(AudioFeatures::transpose(fb), "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_banks.txt");
 
     // // test mfcc
     // for (auto& frame : frames) {
