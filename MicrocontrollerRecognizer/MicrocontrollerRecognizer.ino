@@ -1,45 +1,103 @@
+#include <Complex.h>
+
 #include <TensorFlowLite.h>
 #include <Stepper.h>
 
-/***************************
- * Example Sketch for the SparkFun MEMS Microphone Breakout Board
- * Written by jenfoxbot <jenfoxbot@gmail.com>
- * Code is open-source, beer/coffee-ware license.
+/**
+ * Feature Engineering
  */
+const int SIGNAL_RATE = 16000;
+const int WIN_LENGTH = SIGNAL_RATE * 0.025;
+const int HOP_LENGTH = SIGNAL_RATE * 0.01; 
+const int N_FFT = 512;
+const int WAVEFORM_LENGTH = 16000 * 1.2; // sr * seconds
+const int NUM_FRAMES = 98; // assumes 1.2 seconds of audio; 25ms window; 10ms hop
 
 /**
- * Frame audio into short windows to prepare for Fourier transform
+ * Frame the audio into overlapping windows, padding with zeros
+ * to ensure each window is of length >= N_FFT.
  */
-std::vector<std::vector<float>> frame(wv std::valarray<float>, winLength int, hopLength int) {
-  int offset = 0;
-  std::vector<std::vector<float>> frames;
 
-  while (offset < wv.size() - winLength) {
-      
-      std::vector<float> frame;
-      for(int i = 0; i < winLength; ++i) {
-          frame.push_back(wav[offset+i]);
-      }
-      frames.push_back(frame);
-      offset += signalHopLength;
+void hamming(float window[], int window_size) {
+    for(int i = 0; i < window_size; i++) {
+        window[i] *= 0.54 - (0.46 * cos( (2 * PI * i) / (window_size - 1) ));
+    }
+};
+ 
+float ** frame(float waveform[], int win_length, int hop_length, int nfft) {
+
+  bool pad = nfft > win_length;
+  int frame_length = pad ? nfft : win_length;
+  float *frames[NUM_FRAMES];
+
+  int offset = 0;
+  for (int i = 0; i < NUM_FRAMES; i++) {
+    
+    float frame[frame_length];
+    int start = pad ? (nfft - win_length) / 2 : 0; // TODO: test this
+    for (int j = start; j < win_length; j++) {
+      frame[j] = waveform[offset+j];
+      offset += hop_length;
+    }
+    hamming(frame, nfft);
+    frames[i] = frame;
   }
   return frames;
 }
 
 /**
- * Perform windowing  
+ * Perform the Short-term Fourier transform on each of the windows
+ * which we framed above. Then take the magnitude / power of that transformation.
  */
-void hamming(int winLength, std::vector<&std::valarray<float>> frames) {}
+void fft(float x[], int size) {};
+
+float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
+  float *stft_frames[NUM_FRAMES];
+
+  // the input windows have already been zero-padded to have N_FFT length
+  // and had the hamming window applied
+  for (int i = 0; i < num_frames; i++) {
+    
+    float stft_frame[frame_length];
+    for (int j = 0; j < frame_length; j++) {
+      // cast to complex  
+    }
+    fft(stft_frame, frame_length);
+    // take only the real (LH) side; b/c real-valued signnal
+  }
+  // recall here we only need the LHS side, b/c for real-valued signals it's reflection symmetric
+  
+  return stft_frames;
+};
 
 /**
- * Apply the Fourier transform and then compute the Power spectrum.
+ * Convert the power / magnitude spectrum into Filter banks (spectrogram), which
+ * are the input features to our model.
  */
-void stft() {}
+float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
+  float low_freq = 0.0;
+  float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
+  float step = (high_freq - low_freq) / (nfilter+1);
+  
+  float filters [nfilter+2];
+  filters[0] = 0.0f;
+  for (int i = 1; i < nfilter+2; i++) {
+      filters[i] = filters[i-1] + step;
+  }
+  return filters;
+}
+
+void mel_to_hz() {};
+
+void magnitude_to_db() {};
+
+void power_to_db() {};
+
+//float ** filter_banks() {};
 
 /**
- * Apply filter banks.
+ * Conversions
  */
-void filterBank() {}
 
 // Connect the MEMS AUD output to the Arduino A0 pin
 int mic = A0;
