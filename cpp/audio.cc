@@ -1,301 +1,177 @@
+#include "iohandler.h"
 #include <iostream>
-#include <iterator>
-#include <complex>
-#include <fstream>
-#include <valarray>
-#include <vector>
-#include <string>
-
-using namespace std;
 
 const float PI = 3.14159265358979323846;
+
+/**
+ * This file contains the Feature Engineering pipeline transforming
+ * a raw normalized [-1, 1] audio amplitude waveform into a set of 
+ * filter banks (Spectrogram) by hand given the library constraints
+ * of an Arduino.
+ * These are the same functions used in MicrocontrollerRecognizer.  
+ */
+
+class Complex {
+  
+  public:
+    Complex(const float r = 0, const float i = 0) : re(r), im(i) {};
+
+    float real () {return re;};
+    float img () {return im;};
+
+    Complex operator * (const Complex& x) {
+      float r = re * x.re - im * x.im;
+      float i = re * x.im + im * x.re;
+      return Complex(r, i);
+    }
+
+    Complex operator - (const Complex& x) {
+      return Complex(re - x.re, im - x.im);
+    }
+
+    Complex operator + (const Complex& x) {
+      return Complex(re + x.re, im + x.im); 
+    }
+  
+    static Complex polar(const float &rho, const float &theta) {
+       return Complex(rho * cos(theta), rho * sin(theta));
+    }
+  protected:
+    float re;
+    float im;
+};
+
+/**
+ * Feature Engineering
+ */
 const int SIGNAL_RATE = 16000;
-const int WIN_LENGTH = SIGNAL_RATE * 0.025;
-const int HOP_LENGTH = SIGNAL_RATE * 0.01; 
+const int WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
+const int HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
 const int N_FFT = 512;
+const int WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
+const int NUM_FRAMES = 118;                 // assumes 1.2 seconds of audio; 25ms window; 10ms hop
 
-class IOHandler {
-    public: 
-        static std::valarray<float> load(std::string path) {
-
-            std::fstream a(path.c_str());
-            std::string l;
-            int signal_length = 0;
-            while (std::getline(a, l)) ++signal_length;
-
-            std::valarray<float> raw(signal_length);
-            int idx = 0;
-
-            std::fstream audiof(path.c_str());
-            std::string line;
-            while (std::getline(audiof, line)) {
-                raw[idx] = std::stof(line);
-                ++idx;
-            }
-            return raw;
-        };
-
-        static void write(std::valarray<std::valarray<float>> frames, std::string path) {
-            std::ofstream out_file;
-            std::ostream_iterator<float> out_it (out_file, ",");
-
-            out_file.open (path);
-            for (const auto& f : frames) {
-                std::copy(std::begin(f), std::end(f), out_it);
-                out_file << std::endl;
-            }
-            out_file.close();
-        };
-
-        static void write(std::vector<std::valarray<float>> frames, std::string path) {
-            std::ofstream out_file;
-            std::ostream_iterator<float> out_it (out_file, ",");
-
-            out_file.open (path);
-            for (const auto& f : frames) {
-                std::copy(std::begin(f), std::end(f), out_it);
-                out_file << std::endl;
-            }
-            out_file.close();
-        };
-
+/**
+ * Frame the audio into overlapping windows, padding with zeros
+ * to ensure each window is of length >= N_FFT.
+ */
+void hamming(float window[], int window_size) {
+    for(int i = 0; i < window_size; i++) {
+        window[i] *= 0.54 - (0.46 * cos( (2 * PI * i) / (window_size - 1) ));
+    }
 };
 
-class AudioFeatures {
+float ** frame(float waveform[], int win_length, const int hop_length, const int nfft) {
 
-    public:
-        typedef std::complex<float> Complex;
-        typedef std::valarray<float> Waveform;
-        typedef std::valarray<std::valarray<Complex>> ComplexMatrix;
-        typedef std::valarray<std::valarray<float>> RealMatrix;
+  float** frames = new float*[NUM_FRAMES];
 
-        /** WINDOWING */
-        static std::vector<Waveform> frame(Waveform wv, int win_length, int hop_length) {
-            int offset = 0;
-            std::vector<Waveform> frames;
+  bool pad = nfft > win_length;
+  int frame_length = pad ? nfft : win_length;
+  int offset = pad ? (nfft - win_length) / 2 : 0;
+  int start = 0;  
 
-            while (offset < wv.size() - win_length) {
-                frames.push_back( wv[std::slice(offset, win_length, 1)] );
-                offset += hop_length;
-            }
-            return frames;
-        };
+  for (int i = 0; i < NUM_FRAMES; i++) {
 
-        static void hamming(Waveform& window, int length) {
-            for(int i = 0; i < window.size(); i++) {
-                window[i] *= 0.54 - (0.46 * std::cos( (2 * PI * i) / (length - 1) ));
-            }
-        };
 
-        static Waveform pad(Waveform& window, int offset) {
-            Waveform padded(window.size() + 2 * offset);
-            for (int i = 0; i < window.size(); i++) {
-                padded[i+offset] = window[i];
-            }
-            return padded;
-        }
+    float* frame = new float[frame_length];
 
-        /** FOURIER TRANSFORM */
-        static RealMatrix raise(ComplexMatrix& mat, float power) {
-            RealMatrix m (mat.size());
-            for (int i = 0; i < mat.size(); i++) {
-                std::valarray<float> x (mat[i].size());
-                for (int j = 0; j < mat[i].size(); j++) {
-                    x[j] = std::pow(std::abs(mat[i][j]), power);
-                }
-                m[i] = x;
-            }
-            return m;       
-        }
+    for (int j = 0; j < offset; j++) frame[j] = 0.0;
+    for (int k = 0; k < win_length; k++) {
+      frame[offset+k] = waveform[start+k];
+    }
+    for (int l = offset + win_length; l < frame_length; l++) frame[l] = 0.0;
 
-        static RealMatrix magnitude(ComplexMatrix mat) {
-            return raise(mat, 1.0f);
-        };
+    hamming(frame, nfft);
+    frames[i] = frame;
+    start += hop_length;
+  }
 
-        static RealMatrix power(ComplexMatrix mat) {
-            return raise(mat, 2.0f);
-        };
+  return frames;
+}
 
-        static std::valarray<Complex> dft(std::valarray<Complex> &in) {
-            Complex J(0, 1);
-            const size_t N = in.size(); 
-            std::valarray<Complex> out (N);
+/**
+ * Perform the Short-term Fourier transform on each of the windows
+ * which we framed above. Then take the magnitude / power of that transformation.
+ */
+void fft(Complex x[], int n) {
+  if (n <= 1) return;
 
-            for (size_t k = 0; k < N; k++) {
-                Complex s(0, 0);
-                for (size_t t = 0; t < N; t++) {
-                    float angle = 2 * PI * t * k / N;
-                    s += in[t] * std::exp(Complex(0, -angle));
-                }
-                out[k] = s;
-            }
-            return out;
-        };
+  int mid = n/2;
+  Complex even [mid];
+  Complex odd [mid];
+  for (int i = 0; i < n; i++) {
+    int idx = i / 2;
+    if (i % 2 == 0) {
+      even[idx] = x[i];
+    } else {
+      odd[idx] = x[i];
+    }
+  }
 
-        static void fft(std::valarray<Complex>& x) {
-            const size_t N = x.size();
-            if (N <= 1) return;
+  fft(even, mid);
+  fft(odd, mid);
 
-            std::valarray<Complex> even = x[std::slice(0, N/2, 2)];
-            std::valarray<Complex> odd = x[std::slice(1, N/2, 2)];
-        
-            fft(even);
-            fft(odd);
-
-            for(size_t k = 0; k < N/2; ++k) {
-                Complex t = std::polar(1.0f, -2 * PI * k / N) * odd[k];
-                x[k] = even[k] + t;
-                x[k+N/2] = even[k] - t;
-            };
-        };
-
-        static ComplexMatrix stft(std::vector<Waveform>& windows, int nfft = 512) {
-            
-            bool to_pad = windows[0].size() < nfft;
-            int length = to_pad ? nfft : windows[0].size();
-
-            ComplexMatrix m (windows.size());
-
-            int offset = to_pad ? (nfft - windows[0].size())/2 : 0;
-            for (int i = 0; i < windows.size(); i++) {
-
-                Waveform padded = pad(windows[i], offset);
-                hamming(padded, nfft);
-
-                std::valarray<Complex> complex_window (padded.size());
-                for(int j = 0; j < padded.size(); j++) {
-                    complex_window[j] = (Complex) padded[j];
-                }
-                fft(complex_window);
-                // only need the left side because for real-valued signal, transform is reflection-symmetric
-                std::valarray<Complex> real_side = complex_window[std::slice(0, 1 + (nfft/2), 1)];
-                m[i] = real_side;
-            }
-            return m;
-        };
-
-        /** FILTER BANKS */
-        static std::valarray<float> mel_filters(int nfilter, int sr) {
-            float low_freq = 0.0f;
-            float high_freq = (2595 * std::log10(1 + (sr / 2)/ 700.0f));
-            float step = (high_freq - low_freq) / (nfilter+1);
-
-            std::valarray<float> filters (0.0f, nfilter+2);
-            for (int i = 1; i < filters.size(); i++) {
-                filters[i] = filters[i-1] + step;
-            }
-            return filters;
-        };
-
-        static std::valarray<float> mel_to_hz(std::valarray<float> filts) {
-            return (700 * (std::pow(10, filts / 2595.0f) - 1));
-        };
-
-        static void magnitude_to_db(RealMatrix& a) {
-            for(size_t row = 0; row < a.size(); row++) {
-                a[row] = 20.0f * std::log10(a[row]);
-            }
-        };
-
-        static void power_to_db(RealMatrix& a) {
-            for(size_t row = 0; row < a.size(); row++) {
-                a[row] = 10.0f * std::log10(a[row]);
-            }
-        };
-
-        static RealMatrix transpose(RealMatrix& a) {
-            size_t cols = a[0].size();
-            size_t rows = a.size();
-            RealMatrix transposed (cols);
-            for (size_t i = 0; i < cols; i++ ) {
-                transposed[i] = std::valarray<float> (rows);
-                for (size_t j = 0; j < rows; j++) {
-                    transposed[i][j] = a[j][i];
-                }
-            }
-            return transposed;
-        }
-
-        // (n,k) x (k,m) => (n,m)
-        static RealMatrix dot_product(RealMatrix& a, RealMatrix& b) {
-            size_t a_rows = a.size();
-            size_t a_cols = a[0].size();
-            size_t b_rows = b.size();
-            size_t b_cols = b[0].size();
-            RealMatrix dot_prod (a_rows); // [a_rows x a_cols] * [b_rows x b_cols] |=> [a_rows x b_cols]
-
-            // initialize just above zero for numerical stability in log
-            for (size_t r = 0; r < a_rows; r++) dot_prod[r] = std::valarray<float> (0.000001f, b_cols);
-
-            for (size_t i = 0; i < a_rows; ++i) {
-                for (size_t j = 0; j < b_cols; ++j ) {
-                    for (size_t k = 0; k < a_cols; ++k) {
-                        dot_prod[i][j] += a[i][k] * b[k][j];
-                    }
-                }
-            }
-            return dot_prod;
-        };
-
-        static RealMatrix filter_banks(RealMatrix m, int nfilter = 40, int sr = 16000, int n_fft = 512) {
-            std::valarray<float> filts = mel_filters(nfilter, sr);
-            std::valarray<float> hz_points = mel_to_hz(filts);
-
-            std::valarray<float> bins (hz_points.size());
-            for (int i = 0; i < bins.size(); i++) {
-                bins[i] = std::floor((n_fft + 1) * hz_points[i] / sr);
-            }
-
-            RealMatrix fb (nfilter);
-            for (int m = 1; m < nfilter + 1; m++) {
-                int f_m_minus = bins[m-1];
-                int f_m = bins[m];
-                int f_m_plus = bins[m+1];
-
-                fb[m-1] = std::valarray<float> (n_fft / 2 + 1);
-                for (int k = f_m_minus; k < f_m; k++) {
-                    fb[m - 1][k] = (k - bins[m - 1]) / (bins[m] - bins[m - 1]);
-                }
-                for (int k = f_m; k < f_m_plus; k++) {
-                    fb[m - 1][k] = (bins[m + 1] - k) / (bins[m + 1] - bins[m]);
-                }
-            }
-
-            RealMatrix fb_T = transpose(fb);
-            RealMatrix filter_banks = dot_product(m, fb_T);
-
-            return filter_banks;
-        };
-
-        /** MFCCs */
-        // static RealMatrix mfcc(RealMatrix m) {
-
-        // };
-
+  for (int k = 0; k < n/2; ++k) {
+    Complex t = Complex::polar(1.0f, -2 * PI * k / n) * odd[k];
+    x[k] = even[k] + t;
+    x[k+n/2] = even[k] - t;
+  }
 };
 
+float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
+  float *stft_frames[num_frames];
+
+  // the input windows have already been zero-padded to have N_FFT length
+  // and had the hamming window applied
+
+  for (int i = 0; i < num_frames; i++) {
+    
+    Complex stft_frame[frame_length];
+    for (int j = 0; j < frame_length; j++) {
+      stft_frame[j] = Complex (windows[i][j], 0.0f);
+    }
+    fft(stft_frame, frame_length);
+    // take only the LHS; b/c real-valued signal means this is reflection symmetric
+  }
+  
+  return stft_frames;
+};
+
+/**
+ * Convert the power / magnitude spectrum into Filter banks (spectrogram), which
+ * are the input features to our model.
+ */
+float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
+  float low_freq = 0.0;
+  float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
+  float step = (high_freq - low_freq) / (nfilter+1);
+  
+  float filters [nfilter+2];
+  filters[0] = 0.0f;
+  for (int i = 1; i < nfilter+2; i++) {
+      filters[i] = filters[i-1] + step;
+  }
+  return filters;
+}
+
+void mel_to_hz() {};
+
+void magnitude_to_db() {};
+
+void power_to_db() {};
+
+//float ** filter_banks() {};
+
+
+/**
+ * Test main()
+ */
 int main() {
 
     std::string wave_path = "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/sample_wave.out";
-    AudioFeatures::Waveform raw_wave = IOHandler::load(wave_path);
+    float *raw_wave = IOHandler::load_to_array(wave_path);
 
-    std::vector<AudioFeatures::Waveform> frames = AudioFeatures::frame(raw_wave, WIN_LENGTH, HOP_LENGTH);
-    IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/orig_frames.txt");
+    float ** frames = frame(raw_wave, WIN_LENGTH, HOP_LENGTH, N_FFT);
+    IOHandler::write(frames, NUM_FRAMES, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/orig_frames.txt");
 
-    AudioFeatures::ComplexMatrix m = AudioFeatures::stft(frames, N_FFT);
-    AudioFeatures::RealMatrix magnitude_mat = AudioFeatures::magnitude(m);
-    IOHandler::write(magnitude_mat, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_magnitude_frames.txt");
-
-    AudioFeatures::RealMatrix power_mat = AudioFeatures::power(m);
-    IOHandler::write(power_mat, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/stft_power_frames.txt");
-
-    AudioFeatures::RealMatrix fb = AudioFeatures::filter_banks(magnitude_mat);
-    AudioFeatures::magnitude_to_db(fb);
-    IOHandler::write(AudioFeatures::transpose(fb), "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/filter_banks.txt");
-
-    // // test mfcc
-    // for (auto& frame : frames) {
-    //     AudioPreparer::mfcc();
-    // }
-    // IOHandler::write(frames, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/mfcc.txt");
 }
