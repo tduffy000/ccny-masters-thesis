@@ -19,6 +19,10 @@ class Complex {
     float real () {return re;};
     float img () {return im;};
 
+    float abs() {
+      return std::sqrt(std::pow(re, 2) + std::pow(im, 2));
+    }
+
     Complex operator * (const Complex& x) {
       float r = re * x.re - im * x.im;
       float i = re * x.im + im * x.re;
@@ -72,7 +76,6 @@ float ** frame(float waveform[], int win_length, const int hop_length, const int
 
   for (int i = 0; i < NUM_FRAMES; i++) {
 
-
     float* frame = new float[frame_length];
 
     for (int j = 0; j < offset; j++) frame[j] = 0.0;
@@ -118,11 +121,9 @@ void fft(Complex x[], int n) {
   }
 };
 
-float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
-  float *stft_frames[num_frames];
+Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
 
-  // the input windows have already been zero-padded to have N_FFT length
-  // and had the hamming window applied
+  Complex** stft_frames = new Complex*[num_frames];
 
   for (int i = 0; i < num_frames; i++) {
     
@@ -131,11 +132,33 @@ float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_len
       stft_frame[j] = Complex (windows[i][j], 0.0f);
     }
     fft(stft_frame, frame_length);
+
     // take only the LHS; b/c real-valued signal means this is reflection symmetric
+    Complex* left_frame = new Complex[frame_length / 2];
+    for (int k = 0; k < frame_length / 2; k++) {
+      left_frame[k] = stft_frame[k];
+    }
+
+    stft_frames[i] = left_frame;
   }
-  
+
   return stft_frames;
 };
+
+float ** magnitude(Complex ** stft_frames, int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
+
+  float** mag_frames = new float*[num_frames];
+
+  for (int i = 0; i < num_frames; i++) {
+    float* mag_frame = new float[frame_length];
+    for (int j = 0; j < frame_length; j++) {
+      mag_frame[j] = stft_frames[i][j].abs();
+    }
+    mag_frames[i] = mag_frame;
+  }
+
+  return mag_frames;
+}
 
 /**
  * Convert the power / magnitude spectrum into Filter banks (spectrogram), which
@@ -171,7 +194,15 @@ int main() {
     std::string wave_path = "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/sample_wave.out";
     float *raw_wave = IOHandler::load_to_array(wave_path);
 
+    // chunk into short time windows
     float ** frames = frame(raw_wave, WIN_LENGTH, HOP_LENGTH, N_FFT);
-    IOHandler::write(frames, NUM_FRAMES, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/orig_frames.txt");
+    IOHandler::write(frames, NUM_FRAMES, N_FFT, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/orig_frames.txt");
+
+    // stft + magnitude transformation
+    Complex ** stft_frames = stft(frames);
+    float ** mag_frames = magnitude(stft_frames);
+    IOHandler::write(mag_frames, NUM_FRAMES, N_FFT / 2,"/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/stft_magnitude_frames.txt");
+
+    // filter banks
 
 }

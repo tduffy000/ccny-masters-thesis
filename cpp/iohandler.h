@@ -78,13 +78,12 @@ class IOHandler {
             out_file.close();
         }
 
-        // NFFT = 512
-        static void write(float** frames, int num_array, const char path[]) {
+        static void write(float** frames, int num_array, int array_size, const char path[]) {
             std::ofstream out_file;
 
             out_file.open (path);
             for (int i = 0; i < num_array; i++) {
-                for (int j = 0; j < 512; j++) {
+                for (int j = 0; j < array_size; j++) {
                     out_file << frames[i][j] << ",";                    
                 }
                 out_file << std::endl;
