@@ -1,7 +1,35 @@
-#include <Complex.h>
-
 #include <TensorFlowLite.h>
 #include <Stepper.h>
+
+class Complex {
+  
+  public:
+    Complex(const float r = 0, const float i = 0) : re(r), im(i) {};
+
+    float real () {return re;};
+    float img () {return im;};
+
+    Complex operator * (const Complex& x) {
+      float r = re * x.re - im * x.im;
+      float i = re * x.im + im * x.re;
+      return Complex(r, i);
+    }
+
+    Complex operator - (const Complex& x) {
+      return Complex(re - x.re, im - x.im);
+    }
+
+    Complex operator + (const Complex& x) {
+      return Complex(re + x.re, im + x.im); 
+    }
+  
+    static Complex polar(const float &rho, const float &theta) {
+       return Complex(rho * cos(theta), rho * sin(theta));
+    }
+  protected:
+    float re;
+    float im;
+};
 
 /**
  * Feature Engineering
@@ -49,23 +77,46 @@ float ** frame(float waveform[], int win_length, int hop_length, int nfft) {
  * Perform the Short-term Fourier transform on each of the windows
  * which we framed above. Then take the magnitude / power of that transformation.
  */
-void fft(float x[], int size) {};
+void fft(Complex x[], int n) {
+  if (n <= 1) return;
+
+  int mid = n/2;
+  Complex even [mid];
+  Complex odd [mid];
+  for (int i = 0; i < n; i++) {
+    int idx = i / 2;
+    if (i % 2 == 0) {
+      even[idx] = x[i];
+    } else {
+      odd[idx] = x[i];
+    }
+  }
+
+  fft(even, mid);
+  fft(odd, mid);
+
+  for (int k = 0; k < n/2; ++k) {
+    Complex t = Complex::polar(1.0f, -2 * PI * k / n) * odd[k];
+    x[k] = even[k] + t;
+    x[k+n/2] = even[k] - t;
+  }
+};
 
 float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
-  float *stft_frames[NUM_FRAMES];
+  float *stft_frames[num_frames];
 
   // the input windows have already been zero-padded to have N_FFT length
   // and had the hamming window applied
+
   for (int i = 0; i < num_frames; i++) {
     
-    float stft_frame[frame_length];
+    Complex stft_frame[frame_length];
     for (int j = 0; j < frame_length; j++) {
-      // cast to complex  
+      stft_frame[j] = Complex (windows[i][j], 0.0f);
     }
     fft(stft_frame, frame_length);
-    // take only the real (LH) side; b/c real-valued signnal
+    // take only the LHS; b/c real-valued signal means this is reflection symmetric
   }
-  // recall here we only need the LHS side, b/c for real-valued signals it's reflection symmetric
   
   return stft_frames;
 };
