@@ -9,6 +9,10 @@ class Complex {
     float real () {return re;};
     float img () {return im;};
 
+    float absolute_value() {
+      return std::sqrt(std::pow(re, 2) + std::pow(im, 2));
+    }
+
     Complex operator * (const Complex& x) {
       float r = re * x.re - im * x.im;
       float i = re * x.im + im * x.re;
@@ -35,41 +39,46 @@ class Complex {
  * Feature Engineering
  */
 const int SIGNAL_RATE = 16000;
-const int WIN_LENGTH = SIGNAL_RATE * 0.025;
-const int HOP_LENGTH = SIGNAL_RATE * 0.01; 
+const int WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
+const int HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
 const int N_FFT = 512;
-const int WAVEFORM_LENGTH = 16000 * 1.2; // sr * seconds
-const int NUM_FRAMES = 98; // assumes 1.2 seconds of audio; 25ms window; 10ms hop
+const int WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
+const int NUM_FRAMES = 118;                 // assumes 1.2 seconds of audio; 25ms window; 10ms hop
 
 /**
  * Frame the audio into overlapping windows, padding with zeros
  * to ensure each window is of length >= N_FFT.
  */
-
 void hamming(float window[], int window_size) {
     for(int i = 0; i < window_size; i++) {
         window[i] *= 0.54 - (0.46 * cos( (2 * PI * i) / (window_size - 1) ));
     }
 };
- 
-float ** frame(float waveform[], int win_length, int hop_length, int nfft) {
+
+float ** frame(float waveform[], int win_length, const int hop_length, const int nfft) {
+
+  float** frames = new float*[NUM_FRAMES];
 
   bool pad = nfft > win_length;
   int frame_length = pad ? nfft : win_length;
-  float *frames[NUM_FRAMES];
+  int offset = pad ? (nfft - win_length) / 2 : 0;
+  int start = 0;  
 
-  int offset = 0;
   for (int i = 0; i < NUM_FRAMES; i++) {
-    
-    float frame[frame_length];
-    int start = pad ? (nfft - win_length) / 2 : 0; // TODO: test this
-    for (int j = start; j < win_length; j++) {
-      frame[j] = waveform[offset+j];
-      offset += hop_length;
+
+    float* frame = new float[frame_length];
+
+    for (int j = 0; j < offset; j++) frame[j] = 0.0;
+    for (int k = 0; k < win_length; k++) {
+      frame[offset+k] = waveform[start+k];
     }
+    for (int l = offset + win_length; l < frame_length; l++) frame[l] = 0.0;
+
     hamming(frame, nfft);
     frames[i] = frame;
+    start += hop_length;
   }
+
   return frames;
 }
 
@@ -102,11 +111,9 @@ void fft(Complex x[], int n) {
   }
 };
 
-float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
-  float *stft_frames[num_frames];
+Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
 
-  // the input windows have already been zero-padded to have N_FFT length
-  // and had the hamming window applied
+  Complex** stft_frames = new Complex*[num_frames];
 
   for (int i = 0; i < num_frames; i++) {
     
@@ -115,36 +122,33 @@ float ** stft(float windows[][N_FFT], int num_frames = NUM_FRAMES, int frame_len
       stft_frame[j] = Complex (windows[i][j], 0.0f);
     }
     fft(stft_frame, frame_length);
+
     // take only the LHS; b/c real-valued signal means this is reflection symmetric
+    Complex* left_frame = new Complex[frame_length / 2];
+    for (int k = 0; k < frame_length / 2; k++) {
+      left_frame[k] = stft_frame[k];
+    }
+
+    stft_frames[i] = left_frame;
   }
-  
+
   return stft_frames;
 };
 
-/**
- * Convert the power / magnitude spectrum into Filter banks (spectrogram), which
- * are the input features to our model.
- */
-float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
-  float low_freq = 0.0;
-  float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
-  float step = (high_freq - low_freq) / (nfilter+1);
-  
-  float filters [nfilter+2];
-  filters[0] = 0.0f;
-  for (int i = 1; i < nfilter+2; i++) {
-      filters[i] = filters[i-1] + step;
+float ** magnitude(Complex ** stft_frames, int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
+
+  float** mag_frames = new float*[num_frames];
+
+  for (int i = 0; i < num_frames; i++) {
+    float* mag_frame = new float[frame_length];
+    for (int j = 0; j < frame_length; j++) {
+      mag_frame[j] = stft_frames[i][j].absolute_value();
+    }
+    mag_frames[i] = mag_frame;
   }
-  return filters;
+
+  return mag_frames;
 }
-
-void mel_to_hz() {};
-
-void magnitude_to_db() {};
-
-void power_to_db() {};
-
-//float ** filter_banks() {};
 
 /**
  * Conversions

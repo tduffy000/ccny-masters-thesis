@@ -19,7 +19,7 @@ class Complex {
     float real () {return re;};
     float img () {return im;};
 
-    float abs() {
+    float absolute_value() {
       return std::sqrt(std::pow(re, 2) + std::pow(im, 2));
     }
 
@@ -152,7 +152,7 @@ float ** magnitude(Complex ** stft_frames, int num_frames = NUM_FRAMES, int fram
   for (int i = 0; i < num_frames; i++) {
     float* mag_frame = new float[frame_length];
     for (int j = 0; j < frame_length; j++) {
-      mag_frame[j] = stft_frames[i][j].abs();
+      mag_frame[j] = stft_frames[i][j].absolute_value();
     }
     mag_frames[i] = mag_frame;
   }
