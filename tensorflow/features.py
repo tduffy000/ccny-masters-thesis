@@ -66,7 +66,8 @@ class SpectrogramExtractor(FeatureExtractor):
         sr=16000,
         n_fft=512,
         n_mels=40,
-        trim_top_db=30
+        trim_top_db=30,
+        use_mean_normalization=False
     ):
         super().__init__(
             window_length=window_length,
@@ -92,7 +93,10 @@ class SpectrogramExtractor(FeatureExtractor):
                 hop_length=self.hop_length
             )
             self.validate_numeric(feature)
-            yield np.log10(feature + self.log_lift)
+            S = np.log10(feature + self.log_lift)
+            if self.mean_normalize:
+                S -= np.mean(S, axis=0)
+            yield S
 
 class MFCCExtractor(FeatureExtractor):
 
@@ -105,7 +109,8 @@ class MFCCExtractor(FeatureExtractor):
             sr=16000,
             n_fft=512,
             n_mfcc=20,
-            trim_top_db=30
+            trim_top_db=30,
+            use_mean_normalization=False
         ):
             super().__init__(
                 window_length=window_length,
@@ -131,4 +136,7 @@ class MFCCExtractor(FeatureExtractor):
                 hop_length=self.hop_length
             )
             self.validate_numeric(feature)
-            yield np.log10(feature + self.log_lift)
+            S = np.log10(feature + self.log_lift)
+            if self.mean_normalize:
+                S -= np.mean(S, axis=0)
+            yield S
