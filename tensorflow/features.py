@@ -120,15 +120,15 @@ class MFCCExtractor(FeatureExtractor):
             self.log_lift = 1e-6
 
     def as_features(self, path):
-    _, windows = self.get_intervals(path)
-    for w in windows:
-        feature = librosa.feature.mfcc(
-            w,
-            sr=self.sr,
-            n_fft=self.n_fft,
-            n_mfcc=self.n_mfcc,
-            win_length=self.frame_length,
-            hop_length=self.hop_length
-        )
-        self.validate_numeric(feature)
-        yield np.log10(feature + self.log_lift)
+        _, windows = self.get_intervals(path)
+        for w in windows:
+            feature = librosa.feature.mfcc(
+                w,
+                sr=self.sr,
+                n_fft=self.n_fft,
+                n_mfcc=self.n_mfcc,
+                win_length=self.frame_length,
+                hop_length=self.hop_length
+            )
+            self.validate_numeric(feature)
+            yield np.log10(feature + self.log_lift)
