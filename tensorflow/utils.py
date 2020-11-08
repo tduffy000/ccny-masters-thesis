@@ -3,9 +3,6 @@ import time
 
 import tensorflow as tf
 
-# # # # # # #
-# CALLBACKS #
-# # # # # # #
 def lr_scheduler(cutoff, lr):
     def scheduler(epoch):
         if epoch < cutoff:
@@ -14,7 +11,6 @@ def lr_scheduler(cutoff, lr):
             return lr * tf.math.exp(0.1 * (cutoff - epoch))
     return scheduler
 
-# we need to add a callback for metadata saving
 def get_callback(name, conf, lr=None, freeze=False):
     if name == 'lr_scheduler':
         scheduler = lr_scheduler(conf['cutoff_epoch'], lr)
@@ -30,9 +26,6 @@ def get_callback(name, conf, lr=None, freeze=False):
         return tf.keras.callbacks.ModelCheckpoint(fpath)
     return None
 
-# # # # # # #
-# OPTIMIZER #
-# # # # # # #
 def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None, clipnorm=None):
     if type.lower() == 'adam':
         if clipnorm is not None:
@@ -48,3 +41,10 @@ def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None, clipnorm=None
         return tf.keras.optimizers.RMSprop(lr=lr, rho=rho, momentum=momentum, epsilon=epsilon)
     else:
         raise ParameterError()
+
+def get_embedding_model(orig_model, input_shape, layers=2):
+    embedding_model = tf.keras.Sequential([
+        layer for layer in orig_model.layers[:-layers]
+    ])
+    embedding_model.build(input_shape)
+    return embedding_model
