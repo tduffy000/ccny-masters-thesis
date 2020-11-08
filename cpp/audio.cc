@@ -257,7 +257,26 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
 
 };
 
-void magnitude_to_db() {};
+void magnitude_to_db(float ** mat, int n_rows, int n_cols) {
+  for (int i = 0; i < n_rows; i++) {
+    for (int j = 0; j < n_cols; j++) {
+      mat[i][j] = 20.0f * std::log10(mat[i][j]);
+    }
+  }
+};
+
+void mean_normalize(float ** mat, int n_rows, int n_cols) {
+  for (int i = 0; i < n_rows; i++) {
+    float total = 0.0;
+    for (int j = 0; j < n_cols; j++) {
+      total += mat[i][j];
+    }
+    float mean = total / n_cols;
+    for (int j = 0; j < n_cols; j++) {
+      mat[i][j] -= mean;
+    }
+  }
+}
 
 void power_to_db() {};
 
@@ -281,7 +300,8 @@ int main() {
 
     // filter banks
     float ** fb = filter_banks(mag_frames, NUM_FRAMES);
-    // magnitude_to_db
+    // mean_normalize(fb, N_FILTER, NUM_FRAMES);
+    magnitude_to_db(fb, N_FILTER, NUM_FRAMES);
     IOHandler::write(fb, N_FILTER, NUM_FRAMES, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/filter_banks.txt");
 
     // mfcc
