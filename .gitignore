@@ -136,8 +136,9 @@ feature-data/
 # Tensorboard logs
 .tensorboard_logs/
 
-# CSV Training logs
+# CSV logs
 training_logs/
+testing_logs/
 
 # Model checkpoint files
 model_checkpoints/
