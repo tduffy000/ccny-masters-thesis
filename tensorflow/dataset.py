@@ -30,6 +30,8 @@ class DatasetLoader:
         Args:
             dir: 
         """
+        if not os.path.exists(dir):
+            return None
         tfrecord_file_names = list(filter(lambda f: f.endswith('.tfrecords'), os.listdir(dir)))
         tfrecord_file_paths = [ f'{dir}/{fname}' for fname in tfrecord_file_names ]
         dataset = tf.data.Dataset.from_tensor_slices(tfrecord_file_paths)
