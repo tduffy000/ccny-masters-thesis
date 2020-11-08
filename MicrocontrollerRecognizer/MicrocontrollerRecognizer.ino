@@ -44,6 +44,7 @@ const int HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
 const int N_FFT = 512;
 const int WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
 const int NUM_FRAMES = 118;                 // assumes 1.2 seconds of audio; 25ms window; 10ms hop
+const int N_FILTER = 40;
 
 /**
  * Frame the audio into overlapping windows, padding with zeros
@@ -124,8 +125,8 @@ Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length 
     fft(stft_frame, frame_length);
 
     // take only the LHS; b/c real-valued signal means this is reflection symmetric
-    Complex* left_frame = new Complex[frame_length / 2];
-    for (int k = 0; k < frame_length / 2; k++) {
+    Complex* left_frame = new Complex[frame_length / 2 + 1];
+    for (int k = 0; k < frame_length / 2 + 1; k++) {
       left_frame[k] = stft_frame[k];
     }
 
@@ -135,7 +136,7 @@ Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length 
   return stft_frames;
 };
 
-float ** magnitude(Complex ** stft_frames, int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
+float ** magnitude(Complex ** stft_frames, int num_frames, int frame_length) {
 
   float** mag_frames = new float*[num_frames];
 
@@ -148,6 +149,122 @@ float ** magnitude(Complex ** stft_frames, int num_frames = NUM_FRAMES, int fram
   }
 
   return mag_frames;
+}
+
+/**
+ * Convert the power / magnitude spectrum into Filter banks (spectrogram), which
+ * are the input features to our model.
+ */
+float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
+  float low_freq = 0.0;
+  float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
+  float step = (high_freq - low_freq) / (nfilter+1);
+  
+  float * filters = new float[nfilter+2];
+  filters[0] = 0.0f;
+  for (int i = 1; i < nfilter+2; i++) {
+      filters[i] = filters[i-1] + step;
+  }
+  return filters;
+}
+
+void mel_to_hz(float x[], int size) {
+  for (int i = 0; i < size; i++ ) {
+    x[i] = (700 * (std::pow(10, x[i] / 2595.0f) - 1));
+  }
+};
+
+float ** transpose(float ** a, int rows, int cols) {
+  float ** t = new float*[cols];
+  for (int i = 0; i < cols; i++) {
+    float * t_row = new float[rows];
+    for (int j = 0; j < rows; j++) {
+      t_row[j] = a[j][i];
+    }
+    t[i] = t_row;
+  }
+
+  return t;
+}
+
+float ** dot_product(float ** a, float ** b, int a_rows, int a_cols, int b_rows, int b_cols) {
+
+  float ** dot_prod = new float*[a_rows];
+
+  for (int r = 0; r < a_rows; r++) {
+    float* row = new float[b_cols];
+    for (int l = 0; l < b_cols; l++) row[l] = 0.0001f;
+    dot_prod[r] = row;
+  }
+
+  for (int i = 0; i < a_rows; ++i) {
+    for (int j = 0; j < b_cols; ++j) {
+      for (int k = 0; k < a_cols; ++k) {
+        dot_prod[i][j] += a[i][k] * b[k][j];
+      }
+    }
+  }
+  return dot_prod;
+}
+
+float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 16000, int n_fft = 512) {
+
+  float * filts = mel_filters(nfilter, SIGNAL_RATE);
+  mel_to_hz(filts, nfilter+2);
+
+  float bins[nfilter+2];
+  for (int i = 0; i < nfilter+2; i++) {
+    bins[i] = std::floor((n_fft + 1) * filts[i] / sr);
+  }
+
+  // should be on stack not heap
+  float** fb = new float*[nfilter];
+
+  for (int m = 1; m < nfilter + 1; m++) {
+
+    int f_m_minus = bins[m-1];
+    int f_m = bins[m];
+    int f_m_plus = bins[m+1];
+
+    // stack not heap
+    float * f = new float[n_fft / 2 + 1];
+
+    for (int k = f_m_minus; k < f_m; k++) {
+      f[k] = (k - bins[m - 1]) / (bins[m] - bins[m - 1]);
+    }
+    for (int k = f_m; k < f_m_plus; k++) {
+      f[k] = (bins[m + 1] - k) / (bins[m + 1] - bins[m]);
+    }
+    fb[m-1] = f;
+  }
+
+  float ** fb_T = transpose(fb, nfilter, n_fft / 2 + 1);
+  float ** filter_banks = dot_product(mat, fb_T, num_frames, n_fft / 2 + 1, n_fft / 2 + 1, nfilter); 
+  float ** filter_banks_T = transpose(filter_banks, num_frames, nfilter);
+
+  return filter_banks_T;
+
+};
+
+void magnitude_to_db(float ** mat, int n_rows, int n_cols) {
+  for (int i = 0; i < n_rows; i++) {
+    for (int j = 0; j < n_cols; j++) {
+      mat[i][j] = std::log10(mat[i][j]) + 0.000001;
+    }
+  }
+};
+
+void mean_normalize(float ** mat, int n_rows, int n_cols) {
+  for (int i = 0; i < n_rows; i++) {
+    float total = 0.0;
+    for (int j = 0; j < n_cols; j++) {
+      total += mat[i][j];
+    }
+    float mean = total / n_cols;
+    for (int j = 0; j < n_cols; j++) {
+      mat[i][j] -= mean;
+    }
+  }
 }
 
 /**
