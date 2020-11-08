@@ -91,6 +91,4 @@ class IOHandler {
             out_file.close();
         }
 
-        // TODO: handle multi-dimensional smaller than NFFT
-
 };
