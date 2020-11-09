@@ -53,7 +53,7 @@ const int WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
 const int HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
 const int N_FFT = 512;
 const int WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
-const int NUM_FRAMES = 118;                 // assumes 1.2 seconds of audio; 25ms window; 10ms hop
+const int NUM_FRAMES = 121;
 const int N_FILTER = 40;
 
 /**
@@ -66,14 +66,27 @@ void hamming(float window[], int window_size) {
     }
 };
 
-float ** frame(float waveform[], int win_length, const int hop_length, const int nfft) {
+float ** frame(float waveform[], int waveform_length, int win_length, const int hop_length, const int nfft) {
+
+  // pad the waveform on either side with nfft//2 with reflection
+  int wave_pad = nfft / 2;
+  float padded_waveform[waveform_length + nfft];
+  for (int l = 0; l < wave_pad; l++) {
+    padded_waveform[wave_pad - l] = waveform[l];
+  }
+  for (int m = 0; m < waveform_length; m++) {
+    padded_waveform[wave_pad + m] = waveform[m];
+  }
+  for (int r = 0; r < wave_pad; r++) {
+    padded_waveform[wave_pad + waveform_length + r] = waveform[waveform_length - r - 1]; 
+  }
 
   float** frames = new float*[NUM_FRAMES];
 
-  bool pad = nfft > win_length;
-  int frame_length = pad ? nfft : win_length;
-  int offset = pad ? (nfft - win_length) / 2 : 0;
-  int start = 0;  
+  bool pad_frame = nfft > win_length;
+  int frame_length = pad_frame ? nfft : win_length;
+  int offset = pad_frame ? (nfft - win_length) / 2 : 0;
+  int start = 0;
 
   for (int i = 0; i < NUM_FRAMES; i++) {
 
@@ -81,7 +94,7 @@ float ** frame(float waveform[], int win_length, const int hop_length, const int
 
     for (int j = 0; j < offset; j++) frame[j] = 0.0;
     for (int k = 0; k < win_length; k++) {
-      frame[offset+k] = waveform[start+k];
+      frame[offset+k] = padded_waveform[start+k];
     }
     for (int l = offset + win_length; l < frame_length; l++) frame[l] = 0.0;
 
@@ -146,19 +159,16 @@ Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length 
   return stft_frames;
 };
 
-float ** magnitude(Complex ** stft_frames, int num_frames, int frame_length) {
-
-  float** mag_frames = new float*[num_frames];
-
+float ** to_energy(Complex ** stft_frames, int num_frames, int frame_length) {
+  float** frames = new float*[num_frames];
   for (int i = 0; i < num_frames; i++) {
-    float* mag_frame = new float[frame_length];
+    float* frame = new float[frame_length];
     for (int j = 0; j < frame_length; j++) {
-      mag_frame[j] = stft_frames[i][j].absolute_value();
+      frame[j] = stft_frames[i][j].absolute_value();
     }
-    mag_frames[i] = mag_frame;
+    frames[i] = frame;
   }
-
-  return mag_frames;
+  return frames; 
 }
 
 /**
@@ -203,7 +213,7 @@ float ** dot_product(float ** a, float ** b, int a_rows, int a_cols, int b_rows,
 
   for (int r = 0; r < a_rows; r++) {
     float* row = new float[b_cols];
-    for (int l = 0; l < b_cols; l++) row[l] = 0.0001f;
+    for (int l = 0; l < b_cols; l++) row[l] = 0.0;
     dot_prod[r] = row;
   }
 
@@ -248,7 +258,6 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
     fb[m-1] = f;
   }
 
-  // HWM
   float ** fb_T = transpose(fb, nfilter, n_fft / 2 + 1);
   float ** filter_banks = dot_product(mat, fb_T, num_frames, n_fft / 2 + 1, n_fft / 2 + 1, nfilter); 
   float ** filter_banks_T = transpose(filter_banks, num_frames, nfilter);
@@ -257,10 +266,10 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
 
 };
 
-void magnitude_to_db(float ** mat, int n_rows, int n_cols) {
+void log_magnitude(float ** mat, int n_rows, int n_cols) {
   for (int i = 0; i < n_rows; i++) {
     for (int j = 0; j < n_cols; j++) {
-      mat[i][j] = 20.0f * std::log10(mat[i][j]);
+      mat[i][j] = std::log10(mat[i][j]) + 0.000001;
     }
   }
 };
@@ -278,9 +287,6 @@ void mean_normalize(float ** mat, int n_rows, int n_cols) {
   }
 }
 
-void power_to_db() {};
-
-
 /**
  * Test main()
  */
@@ -290,18 +296,18 @@ int main() {
     float *raw_wave = IOHandler::load_to_array(wave_path);
 
     // chunk into short time windows
-    float ** frames = frame(raw_wave, WIN_LENGTH, HOP_LENGTH, N_FFT);
+    float ** frames = frame(raw_wave, WAVEFORM_LENGTH, WIN_LENGTH, HOP_LENGTH, N_FFT);
     IOHandler::write(frames, NUM_FRAMES, N_FFT, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/orig_frames.txt");
 
-    // stft + magnitude transformation
+    // stft + spectrum transformation
     Complex ** stft_frames = stft(frames);
-    float ** mag_frames = magnitude(stft_frames, NUM_FRAMES, N_FFT / 2 + 1);
-    IOHandler::write(mag_frames, NUM_FRAMES, N_FFT / 2 + 1,"/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/stft_magnitude_frames.txt");
+    float ** spec_frames = to_energy(stft_frames, NUM_FRAMES, N_FFT / 2 + 1);
+    IOHandler::write(spec_frames, NUM_FRAMES, N_FFT / 2 + 1,"/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/spec_frames.txt");
 
     // filter banks
-    float ** fb = filter_banks(mag_frames, NUM_FRAMES);
+    float ** fb = filter_banks(spec_frames, NUM_FRAMES);
     // mean_normalize(fb, N_FILTER, NUM_FRAMES);
-    magnitude_to_db(fb, N_FILTER, NUM_FRAMES);
+    log_magnitude(fb, N_FILTER, NUM_FRAMES);
     IOHandler::write(fb, N_FILTER, NUM_FRAMES, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/filter_banks.txt");
 
     // mfcc
