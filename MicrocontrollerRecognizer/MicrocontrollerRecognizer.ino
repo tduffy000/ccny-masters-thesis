@@ -1,6 +1,5 @@
 #include <TensorFlowLite.h>
 #include <Stepper.h>
-
 class Complex {
   
   public:
@@ -43,7 +42,7 @@ const int WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
 const int HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
 const int N_FFT = 512;
 const int WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
-const int NUM_FRAMES = 118;                 // assumes 1.2 seconds of audio; 25ms window; 10ms hop
+const int NUM_FRAMES = 121;
 const int N_FILTER = 40;
 
 /**
@@ -56,14 +55,27 @@ void hamming(float window[], int window_size) {
     }
 };
 
-float ** frame(float waveform[], int win_length, const int hop_length, const int nfft) {
+float ** frame(float waveform[], int waveform_length, int win_length, const int hop_length, const int nfft) {
+
+  // pad the waveform on either side with nfft//2 with reflection
+  int wave_pad = nfft / 2;
+  float padded_waveform[waveform_length + nfft];
+  for (int l = 0; l < wave_pad; l++) {
+    padded_waveform[wave_pad - l] = waveform[l];
+  }
+  for (int m = 0; m < waveform_length; m++) {
+    padded_waveform[wave_pad + m] = waveform[m];
+  }
+  for (int r = 0; r < wave_pad; r++) {
+    padded_waveform[wave_pad + waveform_length + r] = waveform[waveform_length - r - 1]; 
+  }
 
   float** frames = new float*[NUM_FRAMES];
 
-  bool pad = nfft > win_length;
-  int frame_length = pad ? nfft : win_length;
-  int offset = pad ? (nfft - win_length) / 2 : 0;
-  int start = 0;  
+  bool pad_frame = nfft > win_length;
+  int frame_length = pad_frame ? nfft : win_length;
+  int offset = pad_frame ? (nfft - win_length) / 2 : 0;
+  int start = 0;
 
   for (int i = 0; i < NUM_FRAMES; i++) {
 
@@ -71,7 +83,7 @@ float ** frame(float waveform[], int win_length, const int hop_length, const int
 
     for (int j = 0; j < offset; j++) frame[j] = 0.0;
     for (int k = 0; k < win_length; k++) {
-      frame[offset+k] = waveform[start+k];
+      frame[offset+k] = padded_waveform[start+k];
     }
     for (int l = offset + win_length; l < frame_length; l++) frame[l] = 0.0;
 
@@ -136,19 +148,16 @@ Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length 
   return stft_frames;
 };
 
-float ** magnitude(Complex ** stft_frames, int num_frames, int frame_length) {
-
-  float** mag_frames = new float*[num_frames];
-
+float ** to_energy(Complex ** stft_frames, int num_frames, int frame_length) {
+  float** frames = new float*[num_frames];
   for (int i = 0; i < num_frames; i++) {
-    float* mag_frame = new float[frame_length];
+    float* frame = new float[frame_length];
     for (int j = 0; j < frame_length; j++) {
-      mag_frame[j] = stft_frames[i][j].absolute_value();
+      frame[j] = stft_frames[i][j].absolute_value();
     }
-    mag_frames[i] = mag_frame;
+    frames[i] = frame;
   }
-
-  return mag_frames;
+  return frames; 
 }
 
 /**
@@ -159,7 +168,7 @@ float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
   float low_freq = 0.0;
   float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
   float step = (high_freq - low_freq) / (nfilter+1);
-  
+
   float * filters = new float[nfilter+2];
   filters[0] = 0.0f;
   for (int i = 1; i < nfilter+2; i++) {
@@ -193,7 +202,7 @@ float ** dot_product(float ** a, float ** b, int a_rows, int a_cols, int b_rows,
 
   for (int r = 0; r < a_rows; r++) {
     float* row = new float[b_cols];
-    for (int l = 0; l < b_cols; l++) row[l] = 0.0001f;
+    for (int l = 0; l < b_cols; l++) row[l] = 0.0;
     dot_prod[r] = row;
   }
 
@@ -207,49 +216,68 @@ float ** dot_product(float ** a, float ** b, int a_rows, int a_cols, int b_rows,
   return dot_prod;
 }
 
-float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 16000, int n_fft = 512) {
+float ** filter_bank(int n_mels, int sr = 16000, int n_fft = 512) {
 
-  float * filts = mel_filters(nfilter, SIGNAL_RATE);
-  mel_to_hz(filts, nfilter+2);
+  // mel scale
+  float * filts = mel_filters(n_mels, sr);
+  mel_to_hz(filts, n_mels+2);
 
-  float bins[nfilter+2];
-  for (int i = 0; i < nfilter+2; i++) {
-    bins[i] = std::floor((n_fft + 1) * filts[i] / sr);
+  // difference between mel steps
+  float fdiff[n_mels+1];
+  for (int i = 0; i < n_mels + 1; i++) {
+    fdiff[i] = filts[i+1] - filts[i];
   }
 
-  // should be on stack not heap
-  float** fb = new float*[nfilter];
-
-  for (int m = 1; m < nfilter + 1; m++) {
-
-    int f_m_minus = bins[m-1];
-    int f_m = bins[m];
-    int f_m_plus = bins[m+1];
-
-    // stack not heap
-    float * f = new float[n_fft / 2 + 1];
-
-    for (int k = f_m_minus; k < f_m; k++) {
-      f[k] = (k - bins[m - 1]) / (bins[m] - bins[m - 1]);
-    }
-    for (int k = f_m; k < f_m_plus; k++) {
-      f[k] = (bins[m + 1] - k) / (bins[m + 1] - bins[m]);
-    }
-    fb[m-1] = f;
+  // FFT frequencies
+  float fft_freqs[1 + n_fft / 2];
+  float fft_freq_step = (sr * 1.0 / 2) / (n_fft / 2);
+  float fft_freq = 0.0;
+  for (int i = 0; i < 1 + n_fft / 2; i++) {
+    fft_freqs[i] = fft_freq;
+    fft_freq += fft_freq_step;
   }
 
-  float ** fb_T = transpose(fb, nfilter, n_fft / 2 + 1);
-  float ** filter_banks = dot_product(mat, fb_T, num_frames, n_fft / 2 + 1, n_fft / 2 + 1, nfilter); 
-  float ** filter_banks_T = transpose(filter_banks, num_frames, nfilter);
+  // outer subtraction: filts - fft_freqs
+  float ramps[n_mels+2][1 + n_fft/2];
+  for (int i = 0; i < n_mels+2; i++) {
+    for (int j = 0; j < 1 + n_fft/2; j++) {
+      ramps[i][j] = filts[i] - fft_freqs[j]; 
+    }
+  }
 
-  return filter_banks_T;
+  // TODO: everything above is const and, therefore, can be 
+  // a parameter
+  // now build our filter bank matrix
+  float ** weights = new float*[n_mels];
 
-};
+  for (int i = 0; i < n_mels; i++) {
 
-void magnitude_to_db(float ** mat, int n_rows, int n_cols) {
+    float * w = new float[1+n_fft/2];
+    for (int j = 0; j < 1 + n_fft/2; j++) {
+      float lower = -1.0 * ramps[i][j] / fdiff[i];
+      float upper = ramps[i+2][j] / fdiff[i+1];
+      float bound = lower < upper ? lower : upper;
+      w[j] = 0.0 > bound ? 0.0 : bound;
+    }
+
+    weights[i] = w;
+  }
+  // Slaney normalize
+  float enorm;
+  for (int i = 0; i < n_mels; i++) {
+    enorm = 2.0 / (filts[i+2] - filts[i]);
+    for (int j = 0; j < 1 + n_fft/2; j++) {
+      weights[i][j] *= enorm;
+    }
+  }
+
+  return weights;
+}
+
+void log_magnitude(float ** mat, int n_rows, int n_cols) {
   for (int i = 0; i < n_rows; i++) {
     for (int j = 0; j < n_cols; j++) {
-      mat[i][j] = std::log10(mat[i][j]) + 0.000001;
+      mat[i][j] = std::log10(std::pow(mat[i][j], 2.0) + 0.000001);
     }
   }
 };
