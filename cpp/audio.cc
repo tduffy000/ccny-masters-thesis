@@ -179,7 +179,7 @@ float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
   float low_freq = 0.0;
   float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
   float step = (high_freq - low_freq) / (nfilter+1);
-  
+
   float * filters = new float[nfilter+2];
   filters[0] = 0.0f;
   for (int i = 1; i < nfilter+2; i++) {
@@ -227,50 +227,63 @@ float ** dot_product(float ** a, float ** b, int a_rows, int a_cols, int b_rows,
   return dot_prod;
 }
 
-float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 16000, int n_fft = 512) {
+float ** filter_bank(int n_mels, int sr = 16000, int n_fft = 512) {
 
-  float * filts = mel_filters(nfilter, SIGNAL_RATE);
-  mel_to_hz(filts, nfilter+2);
+  // mel scale
+  float * filts = mel_filters(n_mels, sr);
+  mel_to_hz(filts, n_mels+2);
 
-  float bins[nfilter+2];
-  for (int i = 0; i < nfilter+2; i++) {
-    bins[i] = std::floor((n_fft + 1) * filts[i] / sr);
+  // difference between mel steps
+  float fdiff[n_mels+1];
+  for (int i = 0; i < n_mels + 1; i++) {
+    fdiff[i] = filts[i+1] - filts[i];
   }
 
-  float** fb = new float*[nfilter];
-
-  for (int m = 1; m < nfilter + 1; m++) {
-
-    int f_m_minus = bins[m-1];
-    int f_m = bins[m];
-    int f_m_plus = bins[m+1];
-
-    float * f = new float[n_fft / 2 + 1];
-
-    for (int k = f_m_minus; k < f_m; k++) {
-      f[k] = (k - bins[m - 1]) / (bins[m] - bins[m - 1]);
-    }
-    for (int k = f_m; k < f_m_plus; k++) {
-      f[k] = (bins[m + 1] - k) / (bins[m + 1] - bins[m]);
-    }
-    fb[m-1] = f;
+  // FFT frequencies
+  float fft_freqs[1 + n_fft / 2];
+  float fft_freq_step = (sr * 1.0 / 2) / (n_fft / 2);
+  float fft_freq = 0.0;
+  for (int i = 0; i < 1 + n_fft / 2; i++) {
+    fft_freqs[i] = fft_freq;
+    fft_freq += fft_freq_step;
   }
 
-  float ** fb_T = transpose(fb, nfilter, n_fft / 2 + 1);
-  for (int i = 0; i < nfilter; i++) delete fb[i];
-  delete[] fb;
+  // outer subtraction: filts - fft_freqs
+  float ramps[n_mels+2][1 + n_fft/2];
+  for (int i = 0; i < n_mels+2; i++) {
+    for (int j = 0; j < 1 + n_fft/2; j++) {
+      ramps[i][j] = filts[i] - fft_freqs[j]; 
+    }
+  }
 
-  float ** filter_banks = dot_product(mat, fb_T, num_frames, n_fft / 2 + 1, n_fft / 2 + 1, nfilter); 
-  for (int i = 0; i < n_fft / 2 + 1; i++) delete fb_T[i];
-  delete[] fb_T;
+  // TODO: everything above is const and, therefore, can be 
+  // a parameter
+  // now build our filter bank matrix
+  float ** weights = new float*[n_mels];
 
-  float ** filter_banks_T = transpose(filter_banks, num_frames, nfilter);
-  for (int i = 0; i < num_frames; i++) delete filter_banks[i];
-  delete[] filter_banks;
+  for (int i = 0; i < n_mels; i++) {
 
-  return filter_banks_T;
+    float * w = new float[1+n_fft/2];
+    for (int j = 0; j < 1 + n_fft/2; j++) {
+      float lower = -1.0 * ramps[i][j] / fdiff[i];
+      float upper = ramps[i+2][j] / fdiff[i+1];
+      float bound = lower < upper ? lower : upper;
+      w[j] = 0.0 > bound ? 0.0 : bound;
+    }
 
-};
+    weights[i] = w;
+  }
+  // Slaney normalize
+  float enorm;
+  for (int i = 0; i < n_mels; i++) {
+    enorm = 2.0 / (filts[i+2] - filts[i]);
+    for (int j = 0; j < 1 + n_fft/2; j++) {
+      weights[i][j] *= enorm;
+    }
+  }
+
+  return weights;
+}
 
 void log_magnitude(float ** mat, int n_rows, int n_cols) {
   for (int i = 0; i < n_rows; i++) {
@@ -310,9 +323,10 @@ int main() {
     float ** spec_frames = to_energy(stft_frames, NUM_FRAMES, N_FFT / 2 + 1);
     IOHandler::write(spec_frames, NUM_FRAMES, N_FFT / 2 + 1,"/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/spec_frames.txt");
 
-    // filter banks
-    float ** fb = filter_banks(spec_frames, NUM_FRAMES);
-    // mean_normalize(fb, N_FILTER, NUM_FRAMES);
+    float ** bank = filter_bank(40);
+    IOHandler::write(bank, 40, 1 + N_FFT/ 2, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/filter_bank.txt");
+    float ** fb = dot_product(bank, transpose(spec_frames, NUM_FRAMES, 1 + N_FFT/2), 40, 1+N_FFT/2, 1+N_FFT/2, NUM_FRAMES);
+
     log_magnitude(fb, N_FILTER, NUM_FRAMES);
     IOHandler::write(fb, N_FILTER, NUM_FRAMES, "/home/thomas/Dir/ccny/ccny-masters-thesis/cpp/out/arduino/filter_banks.txt");
 
