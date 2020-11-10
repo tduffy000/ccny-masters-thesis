@@ -237,7 +237,6 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
     bins[i] = std::floor((n_fft + 1) * filts[i] / sr);
   }
 
-  // should be on stack not heap
   float** fb = new float*[nfilter];
 
   for (int m = 1; m < nfilter + 1; m++) {
@@ -246,7 +245,6 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
     int f_m = bins[m];
     int f_m_plus = bins[m+1];
 
-    // stack not heap
     float * f = new float[n_fft / 2 + 1];
 
     for (int k = f_m_minus; k < f_m; k++) {
@@ -259,8 +257,16 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
   }
 
   float ** fb_T = transpose(fb, nfilter, n_fft / 2 + 1);
+  for (int i = 0; i < nfilter; i++) delete fb[i];
+  delete[] fb;
+
   float ** filter_banks = dot_product(mat, fb_T, num_frames, n_fft / 2 + 1, n_fft / 2 + 1, nfilter); 
+  for (int i = 0; i < n_fft / 2 + 1; i++) delete fb_T[i];
+  delete[] fb_T;
+
   float ** filter_banks_T = transpose(filter_banks, num_frames, nfilter);
+  for (int i = 0; i < num_frames; i++) delete filter_banks[i];
+  delete[] filter_banks;
 
   return filter_banks_T;
 
@@ -269,7 +275,7 @@ float ** filter_banks(float ** mat, int num_frames, int nfilter = 40, int sr = 1
 void log_magnitude(float ** mat, int n_rows, int n_cols) {
   for (int i = 0; i < n_rows; i++) {
     for (int j = 0; j < n_cols; j++) {
-      mat[i][j] = std::log10(mat[i][j]) + 0.000001;
+      mat[i][j] = std::log10(std::pow(mat[i][j], 2.0) + 0.000001);
     }
   }
 };
