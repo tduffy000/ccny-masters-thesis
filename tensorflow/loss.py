@@ -1,3 +1,6 @@
+import csv
+import os
+
 import tensorflow as tf
 import numpy as np
 
@@ -27,7 +30,7 @@ def false_acceptance_ratio(S_thres, N, M):
     S_thres [NM x N]
     The ratio of falsely accepted impostor speakers over all scored impostors (type II errors).
     """
-    total_fp = sum([ np.sum(S_thres[i,:]) - np.sum(S_thres[i,i:i+M]) for i in range(N)])
+    total_fp = sum([ np.sum(S_thres[i,:]) - np.sum(S_thres[i,i*M:(i+1)*M]) for i in range(N)])
     return total_fp/((N-1)*M)
 
 def false_rejection_ratio(S_thres, N, M):
@@ -35,15 +38,17 @@ def false_rejection_ratio(S_thres, N, M):
     The ratio of falsely rejected geniune speakers over all genuine speakers (type I errors).
     """
     total_real_speaker_utterances = N*M
-    total_rejected = sum([ np.sum(S_thres[i:i+M,i] != True) for i in range(N)])
+    total_rejected = sum([ np.sum(S_thres[i*M:(i+1)*M,i] != True) for i in range(N)])
     return total_rejected / total_real_speaker_utterances
-    
-def equal_error_ratio(S, N, M, threshold_start=0.5, threshold_step=0.01, iters=50):
+
+def equal_error_ratio(S, N, M, threshold_start=0.5, threshold_step=0.01):
     """
     The ratio at which FAR and FRR (defined above) are equivalent.
     """
     epsilon, eer, eer_thres = 1.0, -1.0, -1.0
-    for threshold in [threshold_step*i + threshold_start for i in range(iters)]:
+    eer_far, eer_frr = -1.0, -1.0
+    threshold = threshold_start
+    while threshold < 1.0:
         S_thres = S > threshold
         far = false_acceptance_ratio(S_thres, N, M)
         frr = false_rejection_ratio(S_thres, N, M)
@@ -51,4 +56,29 @@ def equal_error_ratio(S, N, M, threshold_start=0.5, threshold_step=0.01, iters=5
             epsilon = abs(far-frr)
             eer_thres = threshold
             eer = (far+frr)/2
-    return threshold, eer
+            eer_far = far
+            eer_frr = frr
+        threshold += threshold_step
+        
+    return eer_thres, eer, eer_far, eer_frr
+
+def write_eer_results(model, dataset_loader, N, M, path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    train_dataset, test_dataset = dataset_loader.get_datasets()
+    with open(f'{path}/train_err.csv', 'w') as f:
+        writer = csv.DictWriter(f, ['batch_num', 'eer', 'far', 'frr'])
+        writer.writeheader()
+        for i, (inputs, _) in enumerate(train_dataset):
+            S = model(inputs)
+            threshold, EER, FAR, FRR = equal_error_ratio(S, N, M)
+            writer.writerow({'batch_num': i, 'eer': EER, 'far': FAR, 'frr': FRR})
+
+    if test_dataset is not None:
+        with open(f'{path}/test_err.csv', 'w') as f:
+            writer = csv.DictWriter(f, [])
+            writer.writeheader()
+            for i, (inputs, _) in enumerate(train_dataset):
+                S = model(inputs)
+                threshold, EER, FAR, FRR = equal_error_ratio(S, N, M)
+                writer.writerow({'batch_num': i, 'eer': EER, 'far': FAR, 'frr': FRR})
