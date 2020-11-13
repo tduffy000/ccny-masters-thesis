@@ -110,7 +110,7 @@ class SpeakerVerificationModel(tf.keras.Model):
     @staticmethod
     def get_gru(units, return_sequences, activation='tanh'):
         return [
-            tf.keras.layer.GRU(units=units, return_sequences=return_sequences, activation=activation)
+            tf.keras.layers.GRU(units=units, return_sequences=return_sequences, activation=activation)
         ]
 
     @staticmethod
