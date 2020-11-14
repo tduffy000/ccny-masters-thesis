@@ -1,14 +1,15 @@
 sr: 16000
 raw_data:
-  path: /home/thomas/Dir/ccny/ccny-masters-thesis/raw-data
+  path: /media/thomas/TPD EX/thesis-data
   datasets:
     train:
       LibriSpeech:
-        - dev-clean
-        - dev-other
+        - train-clean-100
+        - train-clean-360
+        - train-other-500
+      VoxCeleb1:
+        - dev
     test:
-      # in_sample: # use a percentage of the training set
-      #   test_split: 0.3
       out_of_sample:
         LibriSpeech:
           - test-clean
@@ -16,7 +17,7 @@ raw_data:
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   speakers_per_batch: 8
-  utterances_per_speaker: 4
+  utterances_per_speaker: 8
 features:
   type: melspectrogram
   window_length: 1.2   # seconds
@@ -35,19 +36,19 @@ train:
       clipnorm: 3.0
     dropout: 0.1
     layers:
-      - lstm:
-          units: 128
+      - gru:
+          units: 256
           return_sequences: True
-      - lstm:
-          units: 128
+      - gru:
+          units: 256
       - embedding:
-          nodes: 256
+          nodes: 128
       - similarity_matrix:
-          embedding_length: 256
+          embedding_length: 128
     callbacks:
-      # lr_scheduler:
-      #   cutoff_epoch: 25
-      #   decay: exponential
+      lr_scheduler:
+        cutoff_epoch: 25
+        decay: exponential
       csv_logger:
         dir: training_logs
       checkpoint:
