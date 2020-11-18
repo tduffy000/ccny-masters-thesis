@@ -1,49 +1,35 @@
 #include <TensorFlowLite.h>
+#include "tensorflow/lite/micro/micro_error_reporter.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+
+#include "model.h"
+#include "complex.h"
+
 #include <Stepper.h>
-class Complex {
-  
-  public:
-    Complex(const float r = 0, const float i = 0) : re(r), im(i) {};
-
-    float real () {return re;};
-    float img () {return im;};
-
-    float absolute_value() {
-      return std::sqrt(std::pow(re, 2) + std::pow(im, 2));
-    }
-
-    Complex operator * (const Complex& x) {
-      float r = re * x.re - im * x.im;
-      float i = re * x.im + im * x.re;
-      return Complex(r, i);
-    }
-
-    Complex operator - (const Complex& x) {
-      return Complex(re - x.re, im - x.im);
-    }
-
-    Complex operator + (const Complex& x) {
-      return Complex(re + x.re, im + x.im); 
-    }
-  
-    static Complex polar(const float &rho, const float &theta) {
-       return Complex(rho * cos(theta), rho * sin(theta));
-    }
-  protected:
-    float re;
-    float im;
-};
 
 /**
  * Feature Engineering
  */
 const int SIGNAL_RATE = 16000;
-const int WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
-const int HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
+constexpr size_t WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
+constexpr size_t WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
+constexpr size_t HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
 const int N_FFT = 512;
-const int WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
 const int NUM_FRAMES = 121;
 const int N_FILTER = 40;
+
+// allocate the raw waveform blocks
+float * raw_waveform = new float[WAVEFORM_LENGTH];
+
+// allocate the spectrogram block
+float ** feature = new float*[N_FILTER];
+
+// allocate the embbeding target embedding vector
+const size_t EMBEDDING_LEN = 128;
+float embedding_vector[EMBEDDING_LEN]; 
+
 
 /**
  * Frame the audio into overlapping windows, padding with zeros
@@ -311,11 +297,38 @@ const int noiseThreshold = 20;
 
 void setup() {
   Serial.begin(9600);
+
+  tflite::MicroErrorReporter micro_error_reporter;
+  tflite::ErrorReporter* error_reporter = &micro_error_reporter;
+
+  const tflite::Model* model = ::tflite::GetModel(speaker_model);
+
+  tflite::AllOpsResolver resolver;
+
+  // will need to experiment to determine what this should be
+  const int tensor_arena_size = 2 * 1024;
+  uint8_t tensor_arena[tensor_arena_size];
+
+  tflite::MicroInterpreter interpreter(model, resolver, tensor_arena,
+                                     tensor_arena_size, error_reporter);
+
+  interpreter.AllocateTensors();
+
 }
 
 void loop() {
    int micOutput = findPTPAmp();
    VUMeter(micOutput);   
+
+   // convert Mic input to normalized waveform [-1, 1]
+
+   // turn into a feature
+
+   // pass through model to get embedding vector
+
+   // print out cosine similarity with target embedding 
+
+   // (optional) threshold to accept/reject
 }   
 
 // Find the Peak-to-Peak Amplitude Function
