@@ -1,3 +1,5 @@
+#include <PDM.h>
+
 #include <TensorFlowLite.h>
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -5,303 +7,47 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 
 #include "model.h"
-#include "complex.h"
+#include "audio_feature_provider.h"
 
-#include <Stepper.h>
+namespace {
 
-/**
- * Feature Engineering
- */
-const int SIGNAL_RATE = 16000;
-constexpr size_t WAVEFORM_LENGTH = 16000 * 1.2;    // SIGNAL_RATE * seconds
-constexpr size_t WIN_LENGTH = SIGNAL_RATE * 0.025; // SIGNAL_RATE * seconds
-constexpr size_t HOP_LENGTH = SIGNAL_RATE * 0.01;  // SIGNAL_RATE * seconds
-const int N_FFT = 512;
-const int NUM_FRAMES = 121;
-const int N_FILTER = 40;
+tflite::ErrorReporter* error_reporter = nullptr;
+const tflite::Model* model = nullptr;
+tflite::MicroInterpreter* interpreter = nullptr;
+
+TfLiteTensor* model_input = nullptr;
+
+constexpr int tensorArenaSize = 10 * 1024;
+uint8_t tensor_arena[tensorArenaSize];
+
+const int signal_rate = 16000;
+constexpr size_t waveform_length = 16000 * 1.2;       // SIGNAL_RATE * seconds
+constexpr size_t window_length = signal_rate * 0.025; // SIGNAL_RATE * seconds
+constexpr size_t hop_length = signal_rate * 0.01;     // SIGNAL_RATE * seconds
+const int n_fft = 512;
+const int num_frames = 121;
+const int n_filter = 40;
+const size_t embedding_len = 128;
+const int NOISE_THRESHOLD = 20; // begin sampling if Audio exceeds this level
+
+} // namespace
+
 
 // allocate the raw waveform blocks
-float * raw_waveform = new float[WAVEFORM_LENGTH];
+float * raw_waveform = new float[waveform_length];
 
 // allocate the spectrogram block
-float ** feature = new float*[N_FILTER];
+float ** feature = new float*[n_filter];
 
 // allocate the embbeding target embedding vector
-const size_t EMBEDDING_LEN = 128;
-float embedding_vector[EMBEDDING_LEN]; 
-
-
-/**
- * Frame the audio into overlapping windows, padding with zeros
- * to ensure each window is of length >= N_FFT.
- */
-void hamming(float window[], int window_size) {
-    for(int i = 0; i < window_size; i++) {
-        window[i] *= 0.54 - (0.46 * cos( (2 * PI * i) / (window_size - 1) ));
-    }
-};
-
-float ** frame(float waveform[], int waveform_length, int win_length, const int hop_length, const int nfft) {
-
-  // pad the waveform on either side with nfft//2 with reflection
-  int wave_pad = nfft / 2;
-  float padded_waveform[waveform_length + nfft];
-  for (int l = 0; l < wave_pad; l++) {
-    padded_waveform[wave_pad - l] = waveform[l];
-  }
-  for (int m = 0; m < waveform_length; m++) {
-    padded_waveform[wave_pad + m] = waveform[m];
-  }
-  for (int r = 0; r < wave_pad; r++) {
-    padded_waveform[wave_pad + waveform_length + r] = waveform[waveform_length - r - 1]; 
-  }
-
-  float** frames = new float*[NUM_FRAMES];
-
-  bool pad_frame = nfft > win_length;
-  int frame_length = pad_frame ? nfft : win_length;
-  int offset = pad_frame ? (nfft - win_length) / 2 : 0;
-  int start = 0;
-
-  for (int i = 0; i < NUM_FRAMES; i++) {
-
-    float* frame = new float[frame_length];
-
-    for (int j = 0; j < offset; j++) frame[j] = 0.0;
-    for (int k = 0; k < win_length; k++) {
-      frame[offset+k] = padded_waveform[start+k];
-    }
-    for (int l = offset + win_length; l < frame_length; l++) frame[l] = 0.0;
-
-    hamming(frame, nfft);
-    frames[i] = frame;
-    start += hop_length;
-  }
-
-  return frames;
-}
-
-/**
- * Perform the Short-term Fourier transform on each of the windows
- * which we framed above. Then take the magnitude / power of that transformation.
- */
-void fft(Complex x[], int n) {
-  if (n <= 1) return;
-
-  int mid = n/2;
-  Complex even [mid];
-  Complex odd [mid];
-  for (int i = 0; i < n; i++) {
-    int idx = i / 2;
-    if (i % 2 == 0) {
-      even[idx] = x[i];
-    } else {
-      odd[idx] = x[i];
-    }
-  }
-
-  fft(even, mid);
-  fft(odd, mid);
-
-  for (int k = 0; k < n/2; ++k) {
-    Complex t = Complex::polar(1.0f, -2 * PI * k / n) * odd[k];
-    x[k] = even[k] + t;
-    x[k+n/2] = even[k] - t;
-  }
-};
-
-Complex ** stft(float ** windows, int num_frames = NUM_FRAMES, int frame_length = N_FFT) {
-
-  Complex** stft_frames = new Complex*[num_frames];
-
-  for (int i = 0; i < num_frames; i++) {
-    
-    Complex stft_frame[frame_length];
-    for (int j = 0; j < frame_length; j++) {
-      stft_frame[j] = Complex (windows[i][j], 0.0f);
-    }
-    fft(stft_frame, frame_length);
-
-    // take only the LHS; b/c real-valued signal means this is reflection symmetric
-    Complex* left_frame = new Complex[frame_length / 2 + 1];
-    for (int k = 0; k < frame_length / 2 + 1; k++) {
-      left_frame[k] = stft_frame[k];
-    }
-
-    stft_frames[i] = left_frame;
-  }
-
-  return stft_frames;
-};
-
-float ** to_energy(Complex ** stft_frames, int num_frames, int frame_length) {
-  float** frames = new float*[num_frames];
-  for (int i = 0; i < num_frames; i++) {
-    float* frame = new float[frame_length];
-    for (int j = 0; j < frame_length; j++) {
-      frame[j] = stft_frames[i][j].absolute_value();
-    }
-    frames[i] = frame;
-  }
-  return frames; 
-}
-
-/**
- * Convert the power / magnitude spectrum into Filter banks (spectrogram), which
- * are the input features to our model.
- */
-float * mel_filters(int nfilter, int sr = SIGNAL_RATE) {
-  float low_freq = 0.0;
-  float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
-  float step = (high_freq - low_freq) / (nfilter+1);
-
-  float * filters = new float[nfilter+2];
-  filters[0] = 0.0f;
-  for (int i = 1; i < nfilter+2; i++) {
-      filters[i] = filters[i-1] + step;
-  }
-  return filters;
-}
-
-void mel_to_hz(float x[], int size) {
-  for (int i = 0; i < size; i++ ) {
-    x[i] = (700 * (std::pow(10, x[i] / 2595.0f) - 1));
-  }
-};
-
-float ** transpose(float ** a, int rows, int cols) {
-  float ** t = new float*[cols];
-  for (int i = 0; i < cols; i++) {
-    float * t_row = new float[rows];
-    for (int j = 0; j < rows; j++) {
-      t_row[j] = a[j][i];
-    }
-    t[i] = t_row;
-  }
-
-  return t;
-}
-
-float ** dot_product(float ** a, float ** b, int a_rows, int a_cols, int b_rows, int b_cols) {
-
-  float ** dot_prod = new float*[a_rows];
-
-  for (int r = 0; r < a_rows; r++) {
-    float* row = new float[b_cols];
-    for (int l = 0; l < b_cols; l++) row[l] = 0.0;
-    dot_prod[r] = row;
-  }
-
-  for (int i = 0; i < a_rows; ++i) {
-    for (int j = 0; j < b_cols; ++j) {
-      for (int k = 0; k < a_cols; ++k) {
-        dot_prod[i][j] += a[i][k] * b[k][j];
-      }
-    }
-  }
-  return dot_prod;
-}
-
-float ** filter_bank(int n_mels, int sr = 16000, int n_fft = 512) {
-
-  // mel scale
-  float * filts = mel_filters(n_mels, sr);
-  mel_to_hz(filts, n_mels+2);
-
-  // difference between mel steps
-  float fdiff[n_mels+1];
-  for (int i = 0; i < n_mels + 1; i++) {
-    fdiff[i] = filts[i+1] - filts[i];
-  }
-
-  // FFT frequencies
-  float fft_freqs[1 + n_fft / 2];
-  float fft_freq_step = (sr * 1.0 / 2) / (n_fft / 2);
-  float fft_freq = 0.0;
-  for (int i = 0; i < 1 + n_fft / 2; i++) {
-    fft_freqs[i] = fft_freq;
-    fft_freq += fft_freq_step;
-  }
-
-  // outer subtraction: filts - fft_freqs
-  float ramps[n_mels+2][1 + n_fft/2];
-  for (int i = 0; i < n_mels+2; i++) {
-    for (int j = 0; j < 1 + n_fft/2; j++) {
-      ramps[i][j] = filts[i] - fft_freqs[j]; 
-    }
-  }
-
-  // TODO: everything above is const and, therefore, can be 
-  // a parameter
-  // now build our filter bank matrix
-  float ** weights = new float*[n_mels];
-
-  for (int i = 0; i < n_mels; i++) {
-
-    float * w = new float[1+n_fft/2];
-    for (int j = 0; j < 1 + n_fft/2; j++) {
-      float lower = -1.0 * ramps[i][j] / fdiff[i];
-      float upper = ramps[i+2][j] / fdiff[i+1];
-      float bound = lower < upper ? lower : upper;
-      w[j] = 0.0 > bound ? 0.0 : bound;
-    }
-
-    weights[i] = w;
-  }
-  // Slaney normalize
-  float enorm;
-  for (int i = 0; i < n_mels; i++) {
-    enorm = 2.0 / (filts[i+2] - filts[i]);
-    for (int j = 0; j < 1 + n_fft/2; j++) {
-      weights[i][j] *= enorm;
-    }
-  }
-
-  return weights;
-}
-
-void log_magnitude(float ** mat, int n_rows, int n_cols) {
-  for (int i = 0; i < n_rows; i++) {
-    for (int j = 0; j < n_cols; j++) {
-      mat[i][j] = std::log10(std::pow(mat[i][j], 2.0) + 0.000001);
-    }
-  }
-};
-
-void mean_normalize(float ** mat, int n_rows, int n_cols) {
-  for (int i = 0; i < n_rows; i++) {
-    float total = 0.0;
-    for (int j = 0; j < n_cols; j++) {
-      total += mat[i][j];
-    }
-    float mean = total / n_cols;
-    for (int j = 0; j < n_cols; j++) {
-      mat[i][j] -= mean;
-    }
-  }
-}
-
-/**
- * Conversions
- */
-
-// Connect the MEMS AUD output to the Arduino A0 pin
-int mic = A0;
-
-// Variables to find the peak-to-peak amplitude of AUD output
-const int sampleTime = 50; 
-int micOut;
-
-// TODO: voice activity detection to begin recording samples
-const int noiseThreshold = 20;
+//float embedding_vector[embedding_len]; 
 
 void setup() {
-  Serial.begin(9600);
 
-  tflite::MicroErrorReporter micro_error_reporter;
-  tflite::ErrorReporter* error_reporter = &micro_error_reporter;
+  static tflite::MicroErrorReporter micro_error_reporter;
+  error_reporter = &micro_error_reporter;
 
-  const tflite::Model* model = ::tflite::GetModel(speaker_model);
+  model = tflite::GetModel(speaker_model);
 
   tflite::AllOpsResolver resolver;
 
@@ -309,79 +55,44 @@ void setup() {
   const int tensor_arena_size = 2 * 1024;
   uint8_t tensor_arena[tensor_arena_size];
 
-  tflite::MicroInterpreter interpreter(model, resolver, tensor_arena,
+  static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena,
                                      tensor_arena_size, error_reporter);
 
-  interpreter.AllocateTensors();
+  interpreter = &static_interpreter;
+  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  if (allocate_status != kTfLiteOk) {
+    TF_LITE_REPORT_ERROR(error_reporter, "AllocateTensors() failed");
+    return;
+  }
+
+  model_input = interpreter->input(0);
+
+  PDM.onReceive(receivePDMData);
 
 }
 
 void loop() {
-   int micOutput = findPTPAmp();
-   VUMeter(micOutput);   
+
+  if (!PDM.begin(1, signal_rate)) {
+    Serial.println("Failed to start PDM!");
+    while (1);
+  }
 
    // convert Mic input to normalized waveform [-1, 1]
 
    // turn into a feature
+   //  AudioFeatureProvider::waveform_to_feature();
 
    // pass through model to get embedding vector
 
    // print out cosine similarity with target embedding 
+   //  float similarity = MatrixMath::cosine_similarity();
 
    // (optional) threshold to accept/reject
-}   
+};
 
-// Find the Peak-to-Peak Amplitude Function
-int findPTPAmp(){
-// Time variables to find the peak-to-peak amplitude
-   unsigned long startTime = millis();  // Start of sample window
-   unsigned int PTPAmp = 0; 
+void receivePDMData() {
+//  int bytesAvailable = PDM.available();
 
-// Signal variables to find the peak-to-peak amplitude
-   unsigned int maxAmp = 0;
-   unsigned int minAmp = 1023;
-
-// Find the max and min of the mic output within the 50 ms timeframe
-   while(millis() - startTime < sampleTime) 
-   {
-      micOut = analogRead(mic);
-      if( micOut < 1023) //prevent erroneous readings
-      {
-        if (micOut > maxAmp)
-        {
-          maxAmp = micOut; //save only the max reading
-        }
-        else if (micOut < minAmp)
-        {
-          minAmp = micOut; //save only the min reading
-        }
-      }
-   }
-   
-  PTPAmp = maxAmp - minAmp; // (max amp) - (min amp) = peak-to-peak amplitude
-  double micOut_Volts = (PTPAmp * 3.3) / 1024; // Convert ADC into voltage
-
-  //Uncomment this line for help debugging (be sure to also comment out the VUMeter function)
-  //Serial.println(PTPAmp); 
-
-  //Return the PTP amplitude to use in the soundLevel function. 
-  // You can also return the micOut_Volts if you prefer to use the voltage level.
-  return PTPAmp;   
-}
-
-// Volume Unit Meter function: map the PTP amplitude to a volume unit between 0 and 10.
-int VUMeter(int micAmp){
-  int preValue = 0;
-
-  // Map the mic peak-to-peak amplitude to a volume unit between 0 and 10.
-   // Amplitude is used instead of voltage to give a larger (and more accurate) range for the map function.
-   // This is just one way to do this -- test out different approaches!
-  int fill = map(micAmp, 23, 750, 0, 10); 
-
-  // Only print the volume unit value if it changes from previous value
-  while(fill != preValue)
-  {
-    Serial.println(fill);
-    preValue = fill;
-  }
-}
+//  Int bytesRead = PDM.read();
+};
