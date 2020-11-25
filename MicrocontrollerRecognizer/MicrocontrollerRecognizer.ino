@@ -7,13 +7,16 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 
 #include "model.h"
-#include "audio_feature_provider.h"
+#include "feature_provider.h"
+
+// define EMBEDDING LEN when importing
 
 namespace {
 
 tflite::ErrorReporter* error_reporter = nullptr;
 const tflite::Model* model = nullptr;
 tflite::MicroInterpreter* interpreter = nullptr;
+feature::FeatureProvider* feature_provider = nullptr;
 
 TfLiteTensor* model_input = nullptr;
 
@@ -24,30 +27,33 @@ const int signal_rate = 16000;
 constexpr size_t waveform_length = 16000 * 1.2;       // SIGNAL_RATE * seconds
 constexpr size_t window_length = signal_rate * 0.025; // SIGNAL_RATE * seconds
 constexpr size_t hop_length = signal_rate * 0.01;     // SIGNAL_RATE * seconds
-const int n_fft = 512;
 const int num_frames = 121;
 const int n_filter = 40;
-const size_t embedding_len = 128;
-const int NOISE_THRESHOLD = 20; // begin sampling if Audio exceeds this level
+const size_t embedding_len = 128; 
+const int noise_threshold = 20; // begin sampling if Audio exceeds this level
+
+float raw_waveform_buffer[waveform_length];
+float feature_buffer[n_filter][num_frames]; 
+float embedding_buffer[embedding_len];
+
+// we can enroll offline & import the embedding vector for our demo
+bool is_buffer_full = false;
 
 } // namespace
 
-
-// allocate the raw waveform blocks
-float * raw_waveform = new float[waveform_length];
-
-// allocate the spectrogram block
-float ** feature = new float*[n_filter];
-
-// allocate the embbeding target embedding vector
-//float embedding_vector[embedding_len]; 
-
 void setup() {
 
+  // init the PDM mic
+  PDM.onReceive(receivePDMData);
+  PDM.setGain(20);
+  constexpr int pdmBufferSize = waveform_length * 2;
+  PDM.setBufferSize(pdmBufferSize);
+
+  // setup the model stuff
   static tflite::MicroErrorReporter micro_error_reporter;
   error_reporter = &micro_error_reporter;
 
-  model = tflite::GetModel(speaker_model);
+  model = tflite::GetModel(speaker_model); // speaker_model defined in model.h
 
   tflite::AllOpsResolver resolver;
 
@@ -67,7 +73,8 @@ void setup() {
 
   model_input = interpreter->input(0);
 
-  PDM.onReceive(receivePDMData);
+  static feature::FeatureProvider fp(waveform_length, raw_waveform_buffer, window_length, hop_length);
+  feature_provider = &fp;
 
 }
 
@@ -78,20 +85,26 @@ void loop() {
     while (1);
   }
 
-   // convert Mic input to normalized waveform [-1, 1]
+  // convert Mic input to normalized waveform [-1, 1]
+  feature::normalize_waveform(raw_waveform_buffer, waveform_length);
 
-   // turn into a feature
-   //  AudioFeatureProvider::waveform_to_feature();
+  // turn into a spectrogram feature
+  feature_provider->waveform_to_feature(feature_buffer);
 
-   // pass through model to get embedding vector
+  // copy? into model input space
 
-   // print out cosine similarity with target embedding 
-   //  float similarity = MatrixMath::cosine_similarity();
+  // call model to get embedding vector
 
-   // (optional) threshold to accept/reject
+  // print out cosine similarity with target embedding 
+  float similarity = MatrixMath::cosine_similarity(embedding_buffer, enrolled_embedding, embedding_len);
+
+  // (optional) threshold to accept/reject
+  Serial.println(similarity);
+
 };
 
 void receivePDMData() {
+// copy buffer into rawWaveformBuffer
 //  int bytesAvailable = PDM.available();
 
 //  Int bytesRead = PDM.read();
