@@ -1,3 +1,4 @@
+#include <cmath>
 
 namespace MatrixMath {
 
@@ -9,9 +10,9 @@ namespace MatrixMath {
         }
     };
 
-    float dot_product(float a[], float b[], int length) {
+    float dot_product(float a[], float b[], size_t length) {
         float dot_product = 0.0;
-        for (int i = 0; i < length; i++) dot_product += a[i] * b[i];
+        for (size_t i = 0; i < length; i++) dot_product += a[i] * b[i];
         return dot_product;
     };
 
@@ -29,7 +30,7 @@ namespace MatrixMath {
         }
     };
 
-    float cosine_similarity(float a[], float b[], int length) {
+    float cosine_similarity(float a[], float b[], size_t length) {
         float numerator = dot_product(a, b, length);
         float a_norm = std::sqrt(dot_product(a, a, length));
         float b_norm = std::sqrt(dot_product(b, b, length));
