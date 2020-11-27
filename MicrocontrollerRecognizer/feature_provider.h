@@ -1,10 +1,14 @@
 #include "complex.h"
 #include "matrix_math.h"
 
-#define N_FFT 512
+#ifndef N_FILTER
 #define N_FILTER 40
-#define SR 16000
+#endif
+
+#ifndef N_FRAME
 #define N_FRAME 121
+#endif
+
 
 namespace feature {
 
@@ -20,61 +24,32 @@ enum FeatureStatus {
 class FeatureProvider {
 
     private:
-        int win_length;
-        int hop_length;
+        uint win_length;
+        uint hop_length;
+        uint sr;
+        uint n_fft;
+        uint nfft_real; 
+        uint n_filter;
+        uint n_frame;
 
-        size_t waveform_size;
-        float waveform_data[];
-        float* filters;
-        float fb[][N_FFT/2 + 1];
+        // ref to source raw waveform
+        size_t waveform_length;
+        float* waveform_data;
 
-        // TODO: re-order these methods into logical blocks
+        // blocks for intermediate computation
+        float** frames;
+        Complex** stft_frames;
+        float** energies; 
+        float** transposed;
+
+        // static computation blocks
+        float** fb;
+
         static void hamming(float window[], int window_size) {
             for(int i = 0; i < window_size; i++) {
                 window[i] *= 0.54 - (0.46 * cos( (2 * PI * i) / (window_size - 1) ));
             }
         };
-
-        /**
-         * Frame the audio into overlapping windows, padding with zeros
-         * to ensure each window is of length >= N_FFT.
-         */
-        void frame(float frames[N_FRAME][N_FFT], const int num_frames, float waveform[], int waveform_length, int win_length, const int hop_length, const int nfft) {
-
-            // pad the waveform on either side with nfft//2 with reflection
-            int wave_pad = nfft / 2;
-            float padded_waveform[waveform_length + nfft];
-            for (int l = 0; l < wave_pad; l++) {
-                padded_waveform[wave_pad - l] = waveform[l];
-            }
-            for (int m = 0; m < waveform_length; m++) {
-                padded_waveform[wave_pad + m] = waveform[m];
-            }
-            for (int r = 0; r < wave_pad; r++) {
-                padded_waveform[wave_pad + waveform_length + r] = waveform[waveform_length - r - 1]; 
-            }
-
-            bool pad_frame = nfft > win_length;
-            int frame_length = pad_frame ? nfft : win_length;
-            int offset = pad_frame ? (nfft - win_length) / 2 : 0;
-            int start = 0;
-
-            for (int i = 0; i < num_frames; i++) {
-
-                float* frame = new float[frame_length];
-
-                for (int j = 0; j < offset; j++) frame[j] = 0.0;
-                for (int k = 0; k < win_length; k++) {
-                    frame[offset+k] = padded_waveform[start+k];
-                }
-                for (int l = offset + win_length; l < frame_length; l++) frame[l] = 0.0;
-
-                hamming(frame, nfft);
-                frames[i] = frame;
-                start += hop_length;
-            }
-
-        }
 
         /**
          * Perform the Short-term Fourier transform on each of the windows
@@ -105,7 +80,45 @@ class FeatureProvider {
             }
         };
 
-        static void stft(Complex out[N_FRAME][N_FFT / 2 + 1], float windows[N_FRAME][N_FFT], int num_frames, int frame_length) {
+        /**
+         * Frame the audio into overlapping windows, padding with zeros
+         * to ensure each window is of length >= N_FFT.
+         */
+        void frame() {
+
+            // pad the waveform on either side with nfft//2 with reflection
+            uint wave_pad = n_fft / 2;
+            float padded_waveform[waveform_length + n_fft];
+            for (int l = 0; l < wave_pad; l++) {
+                padded_waveform[wave_pad - l] = waveform_data[l];
+            }
+            for (int m = 0; m < waveform_length; m++) {
+                padded_waveform[wave_pad + m] = waveform_data[m];
+            }
+            for (int r = 0; r < wave_pad; r++) {
+                padded_waveform[wave_pad + waveform_length + r] = waveform_data[waveform_length - r - 1]; 
+            }
+
+            bool pad_frame = n_fft > win_length;
+            uint frame_length = pad_frame ? n_fft : win_length;
+            uint offset = pad_frame ? (n_fft - win_length) / 2 : 0;
+            uint start = 0;
+
+            for (int i = 0; i < n_frame; i++) {
+
+                for (int j = 0; j < offset; j++) frames[i][j] = 0.0;
+                for (int k = 0; k < win_length; k++) {
+                    frames[i][offset+k] = padded_waveform[start+k];
+                }
+                for (int l = offset + win_length; l < frame_length; l++) frames[i][l] = 0.0;
+
+                hamming(frames[i], n_fft);
+                start += hop_length;
+            }
+
+        }
+
+        static void stft(Complex** out, float** windows, uint num_frames, uint frame_length) {
 
             for (int i = 0; i < num_frames; i++) {
                 
@@ -116,27 +129,23 @@ class FeatureProvider {
                 fft(stft_frame, frame_length);
 
                 // take only the LHS; b/c real-valued signal means this is reflection symmetric
-                Complex* left_frame = new Complex[frame_length / 2 + 1];
                 for (int k = 0; k < frame_length / 2 + 1; k++) {
-                    left_frame[k] = stft_frame[k];
+                    out[i][k] = stft_frame[k];
                 }
 
-                out[i] = left_frame;
-            }
+              }
 
         };
 
-        static void to_energy(float out[N_FRAME][N_FFT / 2 + 1], Complex stft_frames[N_FRAME][N_FFT / 2 + 1], int num_frames, int frame_length) {
+        static void to_energy(float** out_frames, Complex** in_frames, uint num_frames, uint frame_length) {
             for (int i = 0; i < num_frames; i++) {
-                float* frame = new float[frame_length];
                 for (int j = 0; j < frame_length; j++) {
-                    frame[j] = stft_frames[i][j].absolute_value();
+                    out_frames[i][j] = in_frames[i][j].absolute_value();
                 }
-                out[i] = frame;
             }
         }
 
-        static void mel_filters(float filters[], int nfilter, int sr) {
+        static void mel_filters(float filters[], uint nfilter, uint sr) {
             float low_freq = 0.0;
             float high_freq = (2595 * std::log10(1 + (sr/2)/ 700.0f));
             float step = (high_freq - low_freq) / (nfilter+1);
@@ -153,7 +162,7 @@ class FeatureProvider {
             }
         };
 
-        static void filter_bank(float weights[][N_FFT/2 + 1], int n_mels, int sr, int nfft) {
+        static void filter_bank(float** weights, uint n_mels, uint sr, uint nfft) {
 
             float filts[n_mels+2];
             mel_filters(filts, n_mels, sr);
@@ -184,14 +193,12 @@ class FeatureProvider {
 
             for (int i = 0; i < n_mels; i++) {
 
-                float * w = new float[1+nfft/2];
                 for (int j = 0; j < 1 + nfft/2; j++) {
                     float lower = -1.0 * ramps[i][j] / fdiff[i];
                     float upper = ramps[i+2][j] / fdiff[i+1];
                     float bound = lower < upper ? lower : upper;
-                    w[j] = 0.0 > bound ? 0.0 : bound;
+                    weights[i][j] = 0.0 > bound ? 0.0 : bound;
                 }
-                weights[i] = w;
             }
 
             // Slaney normalize
@@ -204,7 +211,15 @@ class FeatureProvider {
             }
         }
 
-        static void log_magnitude(float mat[N_FILTER][N_FRAME], int n_rows, int n_cols) {
+        static void log_magnitude(float (&feature_buffer)[N_FILTER][N_FRAME]) {
+            for (int i = 0; i < N_FILTER; i++) {
+                for (int j = 0; j < N_FRAME; j++) {
+                    feature_buffer[i][j] = std::log10(std::pow(feature_buffer[i][j], 2.0) + 0.000001);
+                }
+            }
+        };
+
+        static void log_magnitude(float** mat, uint n_rows, uint n_cols) {
             for (int i = 0; i < n_rows; i++) {
                 for (int j = 0; j < n_cols; j++) {
                     mat[i][j] = std::log10(std::pow(mat[i][j], 2.0) + 0.000001);
@@ -215,49 +230,80 @@ class FeatureProvider {
     public:
 
         FeatureProvider(
-            size_t waveform_size,
-            float waveform_data[],
-            int win_length,
-            int hop_length
-        )   : waveform_size(waveform_size),
+            size_t waveform_length,
+            float* waveform_data,
+            uint win_length,
+            uint hop_length,
+            uint n_filter,
+            uint sr, 
+            uint n_fft,
+            uint n_frame
+        )   : waveform_length(waveform_length),
             waveform_data(waveform_data),
+            sr(sr),
+            n_filter(n_filter),
+            n_fft(n_fft),
+            nfft_real(n_fft / 2 + 1),
             win_length(win_length),
-            hop_length(hop_length) {
+            hop_length(hop_length),
+            n_frame(n_frame) {
 
             // allocate the block for raw waveform data
-            for (size_t i = 0; i < waveform_size; i++) waveform_data[i] = 0;
+            for (size_t i = 0; i < waveform_length; i++) waveform_data[i] = 0;
 
-            // allocate the mel filter banks
-            filter_bank(fb, N_FILTER, SR, N_FFT);
+            // allocate the re-usable filter bank block
+            fb = new float*[n_filter]; // [n_filter, nfft / 2 + 1]
+            for (uint i = 0; i < n_filter; i++) fb[i] = new float[nfft_real]; 
+            filter_bank(fb, n_filter, sr, n_fft);
+
+            // allocate all the temporary computation blocks
+            frames = new float*[n_frame]; // [n_frame, nfft]
+            for (uint i = 0; i < n_frame; i++) frames[i] = new float[n_fft]; 
+
+            stft_frames = new Complex*[n_frame]; // [n_frame, nfft / 2 + 1]
+            for (uint i = 0; i < n_frame; i++) stft_frames[i] = new Complex[nfft_real];
+            
+            energies = new float*[n_frame]; // [n_frame, nfft / 2 + 1]
+            for (uint i = 0; i < n_frame; i++) energies[i] = new float[nfft_real];
+            
+            transposed = new float*[nfft_real]; // [nfft / 2 + 1, n_frame]
+            for (uint i = 0; i < nfft_real; i++) transposed[i] = new float[n_frame];
         };
 
-        // does this need to delete the filters & spectrogram blocks?
+        // TODO: this needs to delete EVERYTHING!!!!
         ~FeatureProvider() {};
 
-        // what does this return? just a status that the caller can access it?
-        // does the caller provide a place for us to dump the feature into?
-        // do we want to de-allocate as we go with the intermediate steps?
-        FeatureStatus waveform_to_feature(float feature_buffer[N_FILTER][N_FRAME]) {
-            // frame
-            float frames[N_FRAME][N_FFT];
-            frame(frames, N_FRAME, waveform_data, waveform_size, win_length, hop_length, N_FFT);
+        template<size_t rows, size_t cols>
+        FeatureStatus waveform_to_feature(float (&feature_buffer)[rows][cols]) {
+            
+            uint nfft_real = n_fft / 2 + 1;
+            frame();
+            stft(stft_frames, frames, n_frame, n_fft);
+            to_energy(energies, stft_frames, n_frame, nfft_real);
 
-            // stft + spectrum transformation
-            Complex stft_frames[N_FRAME][N_FFT / 2 + 1];
-            stft(stft_frames, frames, N_FRAME, N_FFT);
+            MatrixMath::transpose(transposed, energies, n_frame, nfft_real);
+            MatrixMath::dot_product(feature_buffer, fb, transposed, n_filter, nfft_real, nfft_real, n_frame);
 
-            // convert back to abs value
-            float energy_frames[N_FRAME][N_FFT / 2 + 1];
-            to_energy(energy_frames, stft_frames, N_FRAME, N_FFT / 2 + 1);
-
-            // dot product
-            MatrixMath::dot_product(feature_buffer, MatrixMath::transpose(spec_frames, N_FRAME, 1 + N_FFT/2), 40, 1+N_FFT/2, 1+N_FFT/2, N_FRAME);
-
-            // log_magnitude
-            log_magnitude(feature_buffer, N_FILTER, N_FRAME);
+            log_magnitude(feature_buffer);
 
             return FeatureStatus(0);
         };
+
+        FeatureStatus waveform_to_feature(float (&feature_buffer)[N_FILTER][N_FRAME]) {
+            
+            uint nfft_real = n_fft / 2 + 1;
+            frame();
+            stft(stft_frames, frames, n_frame, n_fft);
+            to_energy(energies, stft_frames, n_frame, nfft_real);
+
+            MatrixMath::transpose(transposed, energies, n_frame, nfft_real);
+            MatrixMath::dot_product(feature_buffer, fb, transposed, n_filter, nfft_real, nfft_real, n_frame);
+
+            log_magnitude(feature_buffer);
+
+            return FeatureStatus(0);
+        };
+
 
 
 };

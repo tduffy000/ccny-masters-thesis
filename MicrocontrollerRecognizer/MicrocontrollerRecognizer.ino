@@ -27,6 +27,7 @@ const int signal_rate = 16000;
 constexpr size_t waveform_length = 16000 * 1.2;       // SIGNAL_RATE * seconds
 constexpr size_t window_length = signal_rate * 0.025; // SIGNAL_RATE * seconds
 constexpr size_t hop_length = signal_rate * 0.01;     // SIGNAL_RATE * seconds
+const int nfft = 512;
 const int num_frames = 121;
 const int n_filter = 40;
 const size_t embedding_len = 128; 
@@ -73,7 +74,7 @@ void setup() {
 
   model_input = interpreter->input(0);
 
-  static feature::FeatureProvider fp(waveform_length, raw_waveform_buffer, window_length, hop_length);
+  static feature::FeatureProvider fp(waveform_length, raw_waveform_buffer, window_length, hop_length, n_filter, signal_rate, nfft, num_frames);
   feature_provider = &fp;
 
 }
@@ -96,10 +97,10 @@ void loop() {
   // call model to get embedding vector
 
   // print out cosine similarity with target embedding 
-  float similarity = MatrixMath::cosine_similarity(embedding_buffer, enrolled_embedding, embedding_len);
+//  float similarity = MatrixMath::cosine_similarity(embedding_buffer, enrolled_embedding, embedding_len);
 
   // (optional) threshold to accept/reject
-  Serial.println(similarity);
+//  Serial.println(similarity);
 
 };
 

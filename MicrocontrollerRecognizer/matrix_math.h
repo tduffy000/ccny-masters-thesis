@@ -1,3 +1,11 @@
+#ifndef N_FILTER
+#define N_FILTER 40
+#endif 
+
+#ifndef N_FRAME
+#define N_FRAME 121
+#endif
+
 
 namespace MatrixMath {
 
@@ -16,6 +24,20 @@ namespace MatrixMath {
     };
 
     void dot_product(float** prod, float ** a, float ** b, int a_rows, int a_cols, int b_rows, int b_cols) {
+        for (int r = 0; r < a_rows; r++) {
+            for (int l = 0; l < b_cols; l++) prod[r][l] = 0.0;
+        }
+
+        for (int i = 0; i < a_rows; ++i) {
+            for (int j = 0; j < b_cols; ++j) {
+                for (int k = 0; k < a_cols; ++k) {
+                    prod[i][j] += a[i][k] * b[k][j];
+                }
+            }
+        }
+    };
+
+    void dot_product(float prod[N_FILTER][N_FRAME], float ** a, float ** b, int a_rows, int a_cols, int b_rows, int b_cols) {
         for (int r = 0; r < a_rows; r++) {
             for (int l = 0; l < b_cols; l++) prod[r][l] = 0.0;
         }
