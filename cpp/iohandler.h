@@ -91,4 +91,18 @@ class IOHandler {
             out_file.close();
         }
 
+        template<uint rows, uint cols>
+        static void write(float frames[rows][cols], std::string path) {
+            std::ofstream out_file;
+
+            out_file.open (path);
+            for (int i = 0; i < rows; i++) {
+                for (int j = 0; j < cols; j++) {
+                    out_file << frames[i][j] << ",";                    
+                }
+                out_file << std::endl;
+            }
+            out_file.close();
+        }
+
 };
