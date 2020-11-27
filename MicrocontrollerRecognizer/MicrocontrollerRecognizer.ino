@@ -8,8 +8,7 @@
 
 #include "model.h"
 #include "feature_provider.h"
-
-// define EMBEDDING LEN when importing
+#include "embedding.h"
 
 namespace {
 
@@ -74,7 +73,8 @@ void setup() {
 
   model_input = interpreter->input(0);
 
-  static feature::FeatureProvider fp(waveform_length, raw_waveform_buffer, window_length, hop_length, n_filter, signal_rate, nfft, num_frames);
+  static feature::FeatureProvider fp(waveform_length, raw_waveform_buffer, window_length, 
+                                    hop_length, n_filter, signal_rate, nfft, num_frames);
   feature_provider = &fp;
 
 }
@@ -92,12 +92,22 @@ void loop() {
   // turn into a spectrogram feature
   feature_provider->waveform_to_feature(feature_buffer);
 
-  // copy? into model input space
+  // copy into model input space
+  // supported types -> https://github.com/tensorflow/tensorflow/blob/902d90a01bd854400091b1abe5da970d137e3b19/tensorflow/lite/micro/micro_interpreter.cc#L185
+  for(int i = 0; i < n_filter; i++) {
+    for(int j = 0; j < num_frames; j++) {
+      model_input->data.f[i*n_filter + j] = feature_buffer[i][j];
+    }
+  }
 
   // call model to get embedding vector
+  TfLiteStatus invoke_status = interpreter->Invoke();
 
-  // print out cosine similarity with target embedding 
-//  float similarity = MatrixMath::cosine_similarity(embedding_buffer, enrolled_embedding, embedding_len);
+  // get pointer to output tensor
+  TfLiteTensor* output = interpreter->output(0);
+
+  // compute cosine similarity with target embedding
+  float similarity = MatrixMath::cosine_similarity(output->data.f, enrolled_embedding, embedding_len);
 
   // (optional) threshold to accept/reject
 //  Serial.println(similarity);
