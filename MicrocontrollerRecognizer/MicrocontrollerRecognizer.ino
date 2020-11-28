@@ -36,8 +36,8 @@ float raw_waveform_buffer[waveform_length];
 float feature_buffer[n_filter][num_frames]; 
 float embedding_buffer[embedding_len];
 
-// we can enroll offline & import the embedding vector for our demo
 bool is_buffer_full = false;
+int raw_buffer_idx = 0;
 
 } // namespace
 
@@ -46,8 +46,6 @@ void setup() {
   // init the PDM mic
   PDM.onReceive(receivePDMData);
   PDM.setGain(20);
-  constexpr int pdmBufferSize = waveform_length * 2;
-  PDM.setBufferSize(pdmBufferSize);
 
   // setup the model stuff
   static tflite::MicroErrorReporter micro_error_reporter;
@@ -86,37 +84,45 @@ void loop() {
     while (1);
   }
 
-  // convert Mic input to normalized waveform [-1, 1]
-  feature::normalize_waveform(raw_waveform_buffer, waveform_length);
-
-  // turn into a spectrogram feature
-  feature_provider->waveform_to_feature(feature_buffer);
-
-  // copy into model input space
-  // supported types -> https://github.com/tensorflow/tensorflow/blob/902d90a01bd854400091b1abe5da970d137e3b19/tensorflow/lite/micro/micro_interpreter.cc#L185
-  for(int i = 0; i < n_filter; i++) {
-    for(int j = 0; j < num_frames; j++) {
-      model_input->data.f[i*n_filter + j] = feature_buffer[i][j];
+  if (is_buffer_full) {
+    // convert Mic input to normalized waveform [-1, 1]
+    feature::normalize_waveform(raw_waveform_buffer, waveform_length);
+  
+    // turn into a spectrogram feature
+    feature_provider->waveform_to_feature(feature_buffer);
+  
+    // copy into model input space
+    // supported types -> https://github.com/tensorflow/tensorflow/blob/902d90a01bd854400091b1abe5da970d137e3b19/tensorflow/lite/micro/micro_interpreter.cc#L185
+    for(int i = 0; i < n_filter; i++) {
+      for(int j = 0; j < num_frames; j++) {
+        model_input->data.f[i*n_filter + j] = feature_buffer[i][j];
+      }
     }
+  
+    // call model to get embedding vector
+    TfLiteStatus invoke_status = interpreter->Invoke();
+  
+    // get pointer to output tensor
+    TfLiteTensor* output = interpreter->output(0);
+  
+    // compute cosine similarity with target embedding
+    float similarity = MatrixMath::cosine_similarity(output->data.f, enrolled_embedding, embedding_len);
+  
+    // (optional) threshold to accept/reject
+    //  Serial.println(similarity); 
+
+    raw_buffer_idx = 0;
+    is_buffer_full = false;
   }
-
-  // call model to get embedding vector
-  TfLiteStatus invoke_status = interpreter->Invoke();
-
-  // get pointer to output tensor
-  TfLiteTensor* output = interpreter->output(0);
-
-  // compute cosine similarity with target embedding
-  float similarity = MatrixMath::cosine_similarity(output->data.f, enrolled_embedding, embedding_len);
-
-  // (optional) threshold to accept/reject
-//  Serial.println(similarity);
 
 };
 
 void receivePDMData() {
-// copy buffer into rawWaveformBuffer
-//  int bytesAvailable = PDM.available();
-
-//  Int bytesRead = PDM.read();
+  int bytesAvailable = PDM.available();
+  if (bytesAvailable > 0) {
+     int bytesToRead = raw_buffer_idx + bytesAvailable > waveform_length - 1 ? waveform_length - 1 - raw_buffer_idx : bytesAvailable;
+     int bytesRead = PDM.read(raw_waveform_buffer + raw_buffer_idx, bytesToRead);
+     raw_buffer_idx += bytesRead;
+  }
+  if (raw_buffer_idx == waveform_length - 1) is_buffer_full = true;
 };
