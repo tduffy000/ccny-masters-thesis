@@ -80,6 +80,7 @@ class SpectrogramExtractor(FeatureExtractor):
         self.n_fft=n_fft
         self.n_mels=n_mels
         self.log_lift = 1e-6
+        self.mean_normalize = use_mean_normalization
 
     def as_features(self, path):
         _, windows = self.get_intervals(path)
@@ -123,6 +124,7 @@ class MFCCExtractor(FeatureExtractor):
             self.n_fft=n_fft
             self.n_mfcc=n_mfcc
             self.log_lift = 1e-6
+            self.mean_normalize = use_mean_normalization
 
     def as_features(self, path):
         _, windows = self.get_intervals(path)
