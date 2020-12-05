@@ -55,6 +55,33 @@ class SpeakerVerificationModel(tf.keras.Model):
         self.model = self._parse_layer_conf(conf['layers'])
 
     @staticmethod
+    def get_pooling(
+        stat,
+        dim,
+        pool_size,
+        strides=None
+    ):
+        if stat == 'max':
+            if dim == 1:
+                return [
+                    tf.keras.layers.MaxPool1D(pool_size=pool_size, strides=strides, data_format='channels_first')
+                ]
+            if dim == 2:
+                return [
+                    tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, data_format='channels_first')
+                ]
+        if stat == 'avg':
+            if dim == 1:
+                return [
+                    tf.keras.layers.AveragePooling1D(pool_size=pool_size, strides=strides, data_format='channels_first')
+                ]
+            if dim == 2:
+                return [
+                    tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=strides, data_format='channels_first')
+                ]
+        return []
+
+    @staticmethod
     def get_conv1d(
         filters,
         kernel_size,
@@ -163,6 +190,8 @@ class SpeakerVerificationModel(tf.keras.Model):
                 self.layer_list += [tf.keras.layers.Flatten()]
             elif layer_type == 'fc':
                 self.layer_list += self.get_fc(layer['nodes'])
+            elif layer_type == 'pooling':
+                self.layer_list += self.get_pooling(layer['stat'], layer['dim'], layer['pool_size'], layer.get('strides', None))
             elif layer_type == 'embedding':
                 self.P = layer['nodes']
                 self.layer_list += self.get_fc(layer['nodes'])
