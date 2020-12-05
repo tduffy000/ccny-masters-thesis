@@ -24,6 +24,9 @@ def get_callback(name, conf, lr=None, freeze=False):
         if not os.path.exists(conf['dir']):
             os.makedirs(conf['dir'])
         return tf.keras.callbacks.ModelCheckpoint(fpath)
+    elif name == 'tensorboard':
+        logdir = f'{conf["dir"]}/fit/{int(time.time())}'
+        return tf.keras.callbacks.TensorBoard(log_dir=logdir)
     return None
 
 def get_optimizer(type, lr, momentum=None, rho=None, epsilon=None, clipnorm=None):
