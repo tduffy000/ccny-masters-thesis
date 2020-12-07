@@ -36,7 +36,7 @@ class BatchLoader:
 
     @staticmethod
     def is_audio_file(fname):
-        for ftype in ['.flac', '.wav']:
+        for ftype in ['.flac', '.wav', '.mp3']:
             if fname.endswith(ftype):
                 return True
         return False
@@ -131,7 +131,7 @@ class BatchLoader:
         in_sample_speaker_file_mapping = self.get_files(in_sample_datasets)
         self.update_speaker_id_mapping(in_sample_speaker_file_mapping)
         
-        shutil.rmtree(f'{self.target_dir}/train')
+        shutil.rmtree(f'{self.target_dir}/train', ignore_errors=True)
         while True: # TODO: DRY candidate
             self.filter_keys_for_batches(in_sample_speaker_file_mapping, self.utterances_per_speaker)
             if len(in_sample_speaker_file_mapping) < self.speakers_per_batch:
@@ -145,7 +145,7 @@ class BatchLoader:
 
         test_dataset_conf = self.datasets.get('test', None)
         if test_dataset_conf is not None:
-            shutil.rmtree(f'{self.target_dir}/test')
+            shutil.rmtree(f'{self.target_dir}/test', ignore_errors=True)
             if 'out_of_sample' in test_dataset_conf:
                 test_datasets = test_dataset_conf['out_of_sample']
                 out_of_sample_speaker_file_mapping = self.get_files(test_datasets)
