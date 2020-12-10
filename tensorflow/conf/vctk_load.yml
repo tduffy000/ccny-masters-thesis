@@ -1,0 +1,24 @@
+sr: 16000
+raw_data:
+  path: /media/thomas/TPD EX/thesis-data
+  datasets:
+    train:
+      LibriSpeech:
+        - dev-clean
+    test:
+      out_of_sample:
+        VCTK:
+          - test
+feature_data:
+  path: /home/thomas/Dir/ccny/ccny-masters-thesis/testing-feature-data/vctk
+  speakers_per_batch: 8
+  utterances_per_speaker: 8
+features:
+  type: melspectrogram
+  window_length: 1.2   # seconds
+  overlap_percent: 0.5 # out of 1.0
+  frame_length: 0.025  # seconds
+  hop_length: 0.01     # seconds
+  n_fft: 512
+  n_mels: 40
+  trim_top_db: 20
