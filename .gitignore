@@ -145,10 +145,6 @@ testing_logs/
 # Model checkpoint files
 model_checkpoints/
 
-# Frozen models
-frozen_models/
-tiny_models/
-
 # vi / emacs backups
 *~
 
