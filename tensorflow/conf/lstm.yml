@@ -9,11 +9,15 @@ raw_data:
         - train-other-500
       VoxCeleb1:
         - dev
+      CommonVoice:
+        - train
     test:
       out_of_sample:
         LibriSpeech:
           - test-clean
           - test-other
+        CommonVoice:
+          - test
 feature_data:
   path: /home/thomas/Dir/ccny/ccny-masters-thesis/feature-data
   speakers_per_batch: 8
@@ -21,7 +25,7 @@ feature_data:
 features:
   type: melspectrogram
   window_length: 1.2   # seconds
-  overlap_percent: 0.5 # out of 1.0
+  overlap_percent: 0.1 # out of 1.0
   frame_length: 0.025  # seconds
   hop_length: 0.01     # seconds
   n_fft: 512

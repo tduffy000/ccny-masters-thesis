@@ -37,20 +37,20 @@ train:
     dropout: 0.1
     layers:
       - conv1d:
-          filters: 8
+          filters: 12
           kernel_size: 10
       - conv1d:
-          filters: 8
+          filters: 12
           kernel_size: 3
       - pooling:
           stat: avg
           dim: 1
-          pool_size: 4
+          pool_size: 3
       - flatten
       - embedding:
-          nodes: 32
+          nodes: 64
       - similarity_matrix:
-          embedding_length: 32
+          embedding_length: 64
     callbacks:
       lr_scheduler:
         cutoff_epoch: 25
